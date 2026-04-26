@@ -1,9 +1,10 @@
 // ==UserScript==
-// @name                ChatGPT学习通作业考试助手
-// @version      1.0
+// @name CX学习通答题助手
+// @version 1.1
 // @description         本脚本【纯ChatGPT回复答案】 原作者:Ne-21【🥇操作简单】ChatGPT学习通助手，安装即可使用；推荐使用作业、考试自动答题【✨版本特性】版本特性:无题库数据库,全采用ChatGPT回复答案
 // @match               *://*.chaoxing.com/*
 // @connect api.bashijiuhou.com
+// @connect api.zaizhexue.top
 // @run-at              document-end
 // @grant               unsafeWindow
 // @grant               GM_xmlhttpRequest
@@ -78,6 +79,13 @@ var _w = unsafeWindow,
 var _host = "https://api.bashijiuhou.com";
 var _apiKey = "sk-1Pkx8xT2qbnjMVjGOa5RRNroihdd45g2FndkhoVfR4Vi9Rkv";
 var _defaultModel = "deepseek-ai/deepseek-v3.2";
+
+// ZE题库配置
+var _tikuUrl = "https://api.zaizhexue.top/api/query";
+var _tikuToken = "Bearer 80610511e6476c8b33f83c77e98eb385ee98343bb10d04233c56168bad2d01dc603b9a6af46d29bd9d295e1b";
+
+// 题型映射：脚本内部_type → ZE题库type字段
+var _tikuTypeMap = { 0: "0", 1: "1", 2: "2", 3: "3", 4: "4", 5: "0" };
 
 var _mlist, _defaults, _domList, $subBtn, $saveBtn, $frame_c;
 var reportUrlChange = 0;
@@ -2552,7 +2560,98 @@ function getEnc(a, b, c, d, e, f, g) {
 }
 
 
+
+// 查询ZE题库
+// 参数: title(纯题目文本), options(选项文本,如"A.xx|B.xx"), type(题型:0单选/1多选/2填空/3判断/4简答)
+// 返回: Promise<答案字符串> 或 reject(未找到)
+function queryTiku(title, options, type) {
+	return new Promise((resolve, reject) => {
+		var tikuType = _tikuTypeMap[type] || "0";
+		logger('🔍查询ZE题库: ' + title.substring(0, 50) + '...', 'blue')
+
+		GM_xmlhttpRequest({
+			method: 'POST',
+			url: _tikuUrl,
+			headers: {
+				'Content-Type': 'application/json',
+				'Authorization': _tikuToken
+			},
+			data: JSON.stringify({
+				title: title,
+				options: options || '',
+				type: tikuType
+			}),
+			timeout: 15000,
+			onload: function (xhr) {
+				try {
+					var res = JSON.parse(xhr.responseText);
+					if (res.code !== 0 && res.data) {
+						// 题库命中
+						logger('✅ZE题库命中: ' + String(res.data).substring(0, 80), 'green')
+						resolve(String(res.data))
+					} else {
+						// 题库未找到
+						logger('⚠️ZE题库未找到, ' + (res.msg || ''), 'orange')
+						reject({ 'c': -1 }) // -1 表示题库未命中，需要fallback到AI
+					}
+				} catch (e) {
+					logger('ZE题库响应解析失败: ' + xhr.responseText.substring(0, 200), 'red')
+					reject({ 'c': -1 })
+				}
+			},
+			onerror: function () {
+				logger('ZE题库请求失败，将使用AI答题', 'orange')
+				reject({ 'c': -1 })
+			},
+			ontimeout: function () {
+				logger('ZE题库请求超时，将使用AI答题', 'orange')
+				reject({ 'c': -1 })
+			}
+		});
+	});
+}
+
 function getAnswer(_t, _q, retryCount = 0) {
+	logger('题目:' + _q, 'pink')
+
+	// 从_q中提取纯题目和选项（用于题库查询）
+	// _q格式可能是: "单选题:xxx\nA.xx|B.xx" / "多选题:xxx\nA.xx|B.xx" / "判断题(只回答正确或错误):xxx" / "简答题或材料题:xxx" / 纯文本
+	var _title = _q;
+	var _options = '';
+	var titleMatch = _q.match(/^(?:单选题|多选题|判断题[^：]*|简答题[^：]*)[:：]\s*([\s\S]*)/);
+	if (titleMatch) {
+		var rest = titleMatch[1].trim();
+		// 选项和题目之间用\n分隔，选项格式为 A.xx|B.xx|...
+		var parts = rest.split(/\n/);
+		if (parts.length > 1) {
+			_title = parts[0].trim();
+			_options = parts.slice(1).join('|').trim();
+		} else {
+			_title = rest;
+		}
+	}
+
+	// 先查询ZE题库，未命中再使用AI
+	if (_title && _tikuUrl) {
+		return queryTiku(_title, _options || '', _t).then((tikuAnswer) => {
+			return tikuAnswer;
+		}).catch((err) => {
+			if (err && err.c === -1) {
+				// 题库未命中，fallback到AI
+				logger('🔄题库未命中，使用AI答题', 'blue')
+				return getAnswerFromAI(_t, _q, retryCount)
+			}
+			// 其他错误也fallback到AI
+			return getAnswerFromAI(_t, _q, retryCount)
+		})
+	}
+
+	// 没有题库配置或题目信息，直接AI答题
+	return getAnswerFromAI(_t, _q, retryCount)
+}
+
+// AI答题（原getAnswer逻辑）
+function getAnswerFromAI(_t, _q, retryCount = 0) {
  logger('题目:' + _q, 'pink')
  return new Promise((resolve, reject) => {
  let _model = localStorage.getItem('GPTJsSetting.model') || _defaultModel;
@@ -2574,7 +2673,7 @@ function getAnswer(_t, _q, retryCount = 0) {
  logger('请求超过5分钟未响应，正在重新发起请求...（第' + (retryCount + 1) + '次重试）', 'orange')
  requestCompleted = true;
  if (retryCount < 3) {
- getAnswer(_t, _q, retryCount + 1).then(resolve).catch(reject)
+ getAnswerFromAI(_t, _q, retryCount + 1).then(resolve).catch(reject)
  } else {
  logger('重试次数已用尽，跳过此题', 'red')
  reject({ 'c': 0 })
