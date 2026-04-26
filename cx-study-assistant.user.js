@@ -2584,11 +2584,25 @@ function queryTiku(title, options, type) {
 			timeout: 15000,
 			onload: function (xhr) {
 				try {
+					logger('ZE题库原始响应: ' + xhr.responseText.substring(0, 300), 'gray')
 					var res = JSON.parse(xhr.responseText);
 					if (res.code !== 0 && res.data) {
-						// 题库命中
-						logger('✅ZE题库命中: ' + String(res.data).substring(0, 80), 'green')
-						resolve(String(res.data))
+						// 题库命中 - res.data可能是字符串、数组或对象
+						var answer = '';
+						if (typeof res.data === 'string') {
+							answer = res.data;
+						} else if (Array.isArray(res.data)) {
+							// 数组格式：取第一个元素的answer字段，或直接拼接
+							answer = res.data.map(function(item) {
+								return typeof item === 'string' ? item : (item.answer || item.content || item.option || JSON.stringify(item));
+							}).join('#');
+						} else if (typeof res.data === 'object') {
+							// 对象格式：取answer/content/option字段，或直接stringify
+							answer = res.data.answer || res.data.content || res.data.option || res.data.result || JSON.stringify(res.data);
+						}
+						answer = String(answer).trim();
+						logger('✅ZE题库命中: ' + answer.substring(0, 80), 'green')
+						resolve(answer)
 					} else {
 						// 题库未找到
 						logger('⚠️ZE题库未找到, ' + (res.msg || ''), 'orange')
