@@ -1,10 +1,9 @@
 // ==UserScript==
-// @name CX学习通答题助手
-// @version 1.1
-// @description         本脚本【纯ChatGPT回复答案】 原作者:Ne-21【🥇操作简单】ChatGPT学习通助手，安装即可使用；推荐使用作业、考试自动答题【✨版本特性】版本特性:无题库数据库,全采用ChatGPT回复答案
+// @name                ChatGPT学习通作业考试助手
+// @version      1.2
+// @description         本脚本【纯ChatGPT回复答案】 原作者:Ne-21【🥇操作简单】ChatGPT学习通助手，安装即可使用；推荐使用作业、考试自动答题【✨版本特性】版本特性:无题库数据库,全采用ChatGPT回复答案 · 🔓解除复制粘贴限制
 // @match               *://*.chaoxing.com/*
 // @connect api.bashijiuhou.com
-// @connect api.zaizhexue.top
 // @run-at              document-end
 // @grant               unsafeWindow
 // @grant               GM_xmlhttpRequest
@@ -80,16 +79,66 @@ var _host = "https://api.bashijiuhou.com";
 var _apiKey = "sk-1Pkx8xT2qbnjMVjGOa5RRNroihdd45g2FndkhoVfR4Vi9Rkv";
 var _defaultModel = "deepseek-ai/deepseek-v3.2";
 
-// ZE题库配置
-var _tikuUrl = "https://api.zaizhexue.top/api/query";
-var _tikuToken = "Bearer 80610511e6476c8b33f83c77e98eb385ee98343bb10d04233c56168bad2d01dc603b9a6af46d29bd9d295e1b";
-
-// 题型映射：脚本内部_type → ZE题库type字段
-var _tikuTypeMap = { 0: "0", 1: "1", 2: "2", 3: "3", 4: "4", 5: "0" };
-
 var _mlist, _defaults, _domList, $subBtn, $saveBtn, $frame_c;
 var reportUrlChange = 0;
 
+
+
+// ==================== 复制粘贴限制解除 (源自 Chaoxing Copy Helper by lcandy2) ====================
+// 反反调试：Hook Function.prototype.constructor 阻止学习通插入 debugger 断点
+(function removeDebuggerLimit() {
+    var _constructor = Function.prototype.constructor;
+    Function.prototype.constructor = function(s) {
+        if (s === "debugger") {
+            return function() {};
+        }
+        return _constructor(s);
+    };
+})();
+
+// 解除复制粘贴限制
+function removeCopyLimits() {
+    // 1. 移除 body 上的 onselectstart 禁止选中
+    document.body.removeAttribute("onselectstart");
+    // 2. 恢复 CSS 用户选择
+    document.documentElement.style.userSelect = "unset";
+    // 3. 解除 UE 编辑器粘贴限制
+    try {
+        if (typeof UE !== "undefined" && UE && UE.instants && typeof UE.instants === "object") {
+            for (var key in UE.instants) {
+                try {
+                    var instance = UE.instants[key];
+                    if (instance.options) {
+                        instance.options.disablePasteImage = false;
+                    }
+                    if (instance.removeListener && typeof editorPaste === "function") {
+                        instance.removeListener("beforepaste", editorPaste);
+                    }
+                } catch (e) {
+                    console.error("[CX助手] 解除UE编辑器限制失败:", key, e);
+                }
+            }
+        }
+    } catch (e) {
+        console.error("[CX助手] 解除复制限制出错:", e);
+    }
+    console.info("[CX助手] 已解除复制/粘贴限制");
+}
+
+// 延迟执行，等待页面和编辑器加载
+setTimeout(removeCopyLimits, 1500);
+// 监听 DOM 变化，防止学习通重新施加限制
+var _copyObserver = new MutationObserver(function() {
+    if (document.body.getAttribute("onselectstart")) {
+        document.body.removeAttribute("onselectstart");
+    }
+    if (document.documentElement.style.userSelect === "none") {
+        document.documentElement.style.userSelect = "unset";
+    }
+});
+_copyObserver.observe(document.body, { attributes: true, attributeFilter: ["onselectstart"] });
+_copyObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
+// ==================== 复制粘贴限制解除 END ====================
 
 window.onload = function () {
     if (localStorage.getItem('GPTJsSetting.showBox') == 'hide') {
@@ -2560,112 +2609,7 @@ function getEnc(a, b, c, d, e, f, g) {
 }
 
 
-
-// 查询ZE题库
-// 参数: title(纯题目文本), options(选项文本,如"A.xx|B.xx"), type(题型:0单选/1多选/2填空/3判断/4简答)
-// 返回: Promise<答案字符串> 或 reject(未找到)
-function queryTiku(title, options, type) {
-	return new Promise((resolve, reject) => {
-		var tikuType = _tikuTypeMap[type] || "0";
-		logger('🔍查询ZE题库: ' + title.substring(0, 50) + '...', 'blue')
-
-		GM_xmlhttpRequest({
-			method: 'POST',
-			url: _tikuUrl,
-			headers: {
-				'Content-Type': 'application/json',
-				'Authorization': _tikuToken
-			},
-			data: JSON.stringify({
-				title: title,
-				options: options || '',
-				type: tikuType
-			}),
-			timeout: 15000,
-			onload: function (xhr) {
-				try {
-					logger('ZE题库原始响应: ' + xhr.responseText.substring(0, 300), 'gray')
-					var res = JSON.parse(xhr.responseText);
-					// ZE题库返回格式: { data: { code: 1/0, data: "答案", msg: "..." } }
-					var tikuResult = res.data || {};
-					if (tikuResult.code !== 0 && tikuResult.data) {
-						// 题库命中 - tikuResult.data可能是字符串、数组或对象
-						var answer = '';
-						if (typeof tikuResult.data === 'string') {
-							answer = tikuResult.data;
-						} else if (Array.isArray(tikuResult.data)) {
-							answer = tikuResult.data.map(function(item) {
-								return typeof item === 'string' ? item : (item.answer || item.content || item.option || JSON.stringify(item));
-							}).join('#');
-						} else if (typeof tikuResult.data === 'object') {
-							answer = tikuResult.data.answer || tikuResult.data.content || tikuResult.data.option || tikuResult.data.result || JSON.stringify(tikuResult.data);
-						}
-						answer = String(answer).trim();
-						logger('✅ZE题库命中: ' + answer.substring(0, 80), 'green')
-						resolve(answer)
-					} else {
-						// 题库未找到
-						logger('⚠️ZE题库未找到, ' + (tikuResult.msg || ''), 'orange')
-						reject({ 'c': -1 }) // -1 表示题库未命中，需要fallback到AI
-					}
-				} catch (e) {
-					logger('ZE题库响应解析失败: ' + xhr.responseText.substring(0, 200), 'red')
-					reject({ 'c': -1 })
-				}
-			},
-			onerror: function () {
-				logger('ZE题库请求失败，将使用AI答题', 'orange')
-				reject({ 'c': -1 })
-			},
-			ontimeout: function () {
-				logger('ZE题库请求超时，将使用AI答题', 'orange')
-				reject({ 'c': -1 })
-			}
-		});
-	});
-}
-
 function getAnswer(_t, _q, retryCount = 0) {
-	logger('题目:' + _q, 'pink')
-
-	// 从_q中提取纯题目和选项（用于题库查询）
-	// _q格式可能是: "单选题:xxx\nA.xx|B.xx" / "多选题:xxx\nA.xx|B.xx" / "判断题(只回答正确或错误):xxx" / "简答题或材料题:xxx" / 纯文本
-	var _title = _q;
-	var _options = '';
-	var titleMatch = _q.match(/^(?:单选题|多选题|判断题[^：]*|简答题[^：]*)[:：]\s*([\s\S]*)/);
-	if (titleMatch) {
-		var rest = titleMatch[1].trim();
-		// 选项和题目之间用\n分隔，选项格式为 A.xx|B.xx|...
-		var parts = rest.split(/\n/);
-		if (parts.length > 1) {
-			_title = parts[0].trim();
-			_options = parts.slice(1).join('|').trim();
-		} else {
-			_title = rest;
-		}
-	}
-
-	// 先查询ZE题库，未命中再使用AI
-	if (_title && _tikuUrl) {
-		return queryTiku(_title, _options || '', _t).then((tikuAnswer) => {
-			return tikuAnswer;
-		}).catch((err) => {
-			if (err && err.c === -1) {
-				// 题库未命中，fallback到AI
-				logger('🔄题库未命中，使用AI答题', 'blue')
-				return getAnswerFromAI(_t, _q, retryCount)
-			}
-			// 其他错误也fallback到AI
-			return getAnswerFromAI(_t, _q, retryCount)
-		})
-	}
-
-	// 没有题库配置或题目信息，直接AI答题
-	return getAnswerFromAI(_t, _q, retryCount)
-}
-
-// AI答题（原getAnswer逻辑）
-function getAnswerFromAI(_t, _q, retryCount = 0) {
  logger('题目:' + _q, 'pink')
  return new Promise((resolve, reject) => {
  let _model = localStorage.getItem('GPTJsSetting.model') || _defaultModel;
@@ -2687,7 +2631,7 @@ function getAnswerFromAI(_t, _q, retryCount = 0) {
  logger('请求超过5分钟未响应，正在重新发起请求...（第' + (retryCount + 1) + '次重试）', 'orange')
  requestCompleted = true;
  if (retryCount < 3) {
- getAnswerFromAI(_t, _q, retryCount + 1).then(resolve).catch(reject)
+ getAnswer(_t, _q, retryCount + 1).then(resolve).catch(reject)
  } else {
  logger('重试次数已用尽，跳过此题', 'red')
  reject({ 'c': 0 })
