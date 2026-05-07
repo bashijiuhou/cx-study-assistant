@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                ChatGPT学习通作业考试助手
-// @version      1.2
+// @name                ChatGPT学习通作业考试助手 v1.2.8
+// @version      1.2.7
 // @description         本脚本【纯ChatGPT回复答案】 原作者:Ne-21【🥇操作简单】ChatGPT学习通助手，安装即可使用；推荐使用作业、考试自动答题【✨版本特性】版本特性:无题库数据库,全采用ChatGPT回复答案 · 🔓解除复制粘贴限制
 // @match               *://*.chaoxing.com/*
 // @connect api.bashijiuhou.com
@@ -46,6 +46,7 @@ var setting = {
     examTurnTime: 0, // 考试自动跳转下一题随机间隔时间(3-7s)之间，0为关闭，1为开启
     goodStudent: 1,  // 好学生模式,不自动选择答案,仅将单选题和多选题的ABCD加粗
     alterTitle: 1,  //修改题目,将AI回复的答案插入题目中,不建议关闭,AI回复不能完全匹配答案,题目显示答案供手动选择
+    matchDebug: 0,  // 答案匹配调试模式，0为关闭，1为开启，开启后输出原始值与归一化匹配日志
 
     autoLogin: 0,   // 自动登录，0为关闭，1为开启，开启此功能请配置登陆配置项
     phone: '',      // 登录配置项：登录手机号/超星号
@@ -76,180 +77,354 @@ var _w = unsafeWindow,
 
 // 自定义 NewAPI 配置
 var _host = "https://api.bashijiuhou.com";
-var _apiKey = "sk-1Pkx8xT2qbnjMVjGOa5RRNroihdd45g2FndkhoVfR4Vi9Rkv";
-var _defaultModel = "deepseek-ai/deepseek-v3.2";
+var _apiKey = "sk-1Pk...9Rkv";
+var _defaultModel = "deepseek-default";
 
 var _mlist, _defaults, _domList, $subBtn, $saveBtn, $frame_c;
 var reportUrlChange = 0;
+var _oldal, _oldcf;
 
+var STORAGE_KEYS = {
+    showBox: 'GPTJsSetting.showBox',
+    model: 'GPTJsSetting.model',
+    sub: 'GPTJsSetting.sub',
+    force: 'GPTJsSetting.force',
+    examTurn: 'GPTJsSetting.examTurn',
+    goodStudent: 'GPTJsSetting.goodStudent',
+    alterTitle: 'GPTJsSetting.alterTitle',
+    matchDebug: 'GPTJsSetting.matchDebug'
+};
 
+var PANEL_CHECKBOX_SETTINGS = ['sub', 'force', 'examTurn', 'goodStudent', 'alterTitle', 'matchDebug'];
+var PANEL_SELECTOR = '#ne-21box';
+var PANEL_LOG_SELECTOR = '#ne-21log';
+var NOTICE_SELECTOR = '#ne-21notice';
+var COPY_HELPER_LOG_PREFIX = '[CX助手]';
 
-// ==================== 复制粘贴限制解除 (源自 Chaoxing Copy Helper by lcandy2) ====================
-// 反反调试：Hook Function.prototype.constructor 阻止学习通插入 debugger 断点
-(function removeDebuggerLimit() {
-    var _constructor = Function.prototype.constructor;
-    Function.prototype.constructor = function(s) {
-        if (s === "debugger") {
-            return function() {};
+var CopyLimitManager = (function () {
+    var observerStarted = false;
+    var debuggerHookInstalled = false;
+
+    function safeLog(method, message) {
+        if (console && typeof console[method] === 'function') {
+            console[method](COPY_HELPER_LOG_PREFIX + ' ' + message);
         }
-        return _constructor(s);
-    };
-})();
+    }
 
-// 解除复制粘贴限制
-function removeCopyLimits() {
-    // 1. 移除 body 上的 onselectstart 禁止选中
-    document.body.removeAttribute("onselectstart");
-    // 2. 恢复 CSS 用户选择
-    document.documentElement.style.userSelect = "unset";
-    // 3. 解除 UE 编辑器粘贴限制
-    try {
-        if (typeof UE !== "undefined" && UE && UE.instants && typeof UE.instants === "object") {
-            for (var key in UE.instants) {
+    function removeDebuggerLimit() {
+        if (debuggerHookInstalled) {
+            return;
+        }
+        debuggerHookInstalled = true;
+        var originalConstructor = Function.prototype.constructor;
+        Function.prototype.constructor = function (source) {
+            if (source === 'debugger') {
+                return function () {};
+            }
+            return originalConstructor.apply(this, arguments);
+        };
+    }
+
+    function relaxSelectionLimit() {
+        if (document.body) {
+            document.body.removeAttribute('onselectstart');
+            document.body.style.userSelect = 'text';
+            document.body.style.webkitUserSelect = 'text';
+        }
+        if (document.documentElement) {
+            document.documentElement.style.userSelect = 'text';
+            document.documentElement.style.webkitUserSelect = 'text';
+        }
+    }
+
+    function unlockUeEditors() {
+        try {
+            if (typeof UE === 'undefined' || !UE || !UE.instants || typeof UE.instants !== 'object') {
+                return;
+            }
+            Object.keys(UE.instants).forEach(function (key) {
                 try {
                     var instance = UE.instants[key];
+                    if (!instance) {
+                        return;
+                    }
                     if (instance.options) {
                         instance.options.disablePasteImage = false;
                     }
-                    if (instance.removeListener && typeof editorPaste === "function") {
-                        instance.removeListener("beforepaste", editorPaste);
+                    if (instance.removeListener && typeof editorPaste === 'function') {
+                        instance.removeListener('beforepaste', editorPaste);
                     }
-                } catch (e) {
-                    console.error("[CX助手] 解除UE编辑器限制失败:", key, e);
+                } catch (error) {
+                    safeLog('error', '解除UE编辑器限制失败: ' + key + ' ' + error);
                 }
-            }
-        }
-    } catch (e) {
-        console.error("[CX助手] 解除复制限制出错:", e);
-    }
-    console.info("[CX助手] 已解除复制/粘贴限制");
-}
-
-// 延迟执行，等待页面和编辑器加载
-setTimeout(removeCopyLimits, 1500);
-// 监听 DOM 变化，防止学习通重新施加限制
-var _copyObserver = new MutationObserver(function() {
-    if (document.body.getAttribute("onselectstart")) {
-        document.body.removeAttribute("onselectstart");
-    }
-    if (document.documentElement.style.userSelect === "none") {
-        document.documentElement.style.userSelect = "unset";
-    }
-});
-_copyObserver.observe(document.body, { attributes: true, attributeFilter: ["onselectstart"] });
-_copyObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
-// ==================== 复制粘贴限制解除 END ====================
-
-window.onload = function () {
-    if (localStorage.getItem('GPTJsSetting.showBox') == 'hide') {
-        $('#ne-21box').css('display', 'none');
-        $('#ne-21box').css('opacity', '0');
-    } else {
-        $('#ne-21box').css('display', 'block');
-        $('#ne-21box').css('opacity', '1');
-    }
-
-    //监听模型改变
-    // 获取<select>元素
-    const selectElement = $('#modelSelect');
-    // 添加change事件监听器
-    selectElement.on('change', function () {
-        // 获取选定的值
-        const selectedModel = selectElement.val();
-        // 将选定的值存储到localStorage中
-        localStorage.setItem('GPTJsSetting.model', selectedModel);
-    });
-    // 从localStorage中获取上次选定的模型并设置为<select>的默认值
-    const lastSelectedModel = localStorage.getItem('GPTJsSetting.model');
-    if (lastSelectedModel) {
-        selectElement.val(lastSelectedModel);
-    }
-};
-
-// F9显示隐藏界面按键事件监听
-$(document).keydown(function (e) {
-    if (e.keyCode == 120 && $('#ne-21notice')[0] != undefined) {
-        // 切换显示状态并更新 localStorage 的值
-        if (localStorage.getItem('GPTJsSetting.showBox') == 'hide') {
-            $('#ne-21box').css('display', show = 'block');
-            $('#ne-21box').css('opacity', '1');
-            localStorage.setItem('GPTJsSetting.showBox', 'show');
-            logger('F9显隐界面');
-        } else {
-            $('#ne-21box').css('display', show = 'none');
-            localStorage.setItem('GPTJsSetting.showBox', 'hide');
+            });
+        } catch (error) {
+            safeLog('error', '解除复制限制出错: ' + error);
         }
     }
-});
 
-
-$('.navshow').find('a:contains(体验新版)')[0] ? $('.navshow').find('a:contains(体验新版)')[0].click() : '';
-
-setting.decrypt ? decryptFont() : '';
-
-if (_l.hostname == 'i.mooc.chaoxing.com' || _l.hostname == "i.chaoxing.com") {
-    // showTips();
-} else if (_l.pathname == '/login' && setting.autoLogin) {
-    showBox()
-    setTimeout(() => { autoLogin() }, 3000)
-} else if (_l.pathname.includes('/mycourse/studentstudy')) {
-    showBox()
-    $('#ne-21log', window.parent.document).html('初始化完毕！')
-} else if (_l.pathname.includes('/knowledge/cards')) {
-    var params = getTaskParams()
-    if (params == null || params == '$mArg' || $.parseJSON(params)['attachments'].length <= 0) {
-        logger('无任务点可处理，即将跳转页面', 'red')
-        toNext()
-    } else {
-        setTimeout(() => {
-            top.checkJob ? top.checkJob = () => false : true
-            _domList = []
-            _mlist = $.parseJSON(params)['attachments']
-            _defaults = $.parseJSON(params)['defaults']
-            $.each($('.wrap .ans-cc .ans-attach-ct'), (i, t) => {
-                _domList.push($(t).find('iframe'))
-            })
-            missonStart()
-        }, 3000)
+    function enforce() {
+        relaxSelectionLimit();
+        unlockUeEditors();
     }
-} else if (_l.pathname.includes('/exam/test/reVersionTestStartNew')) {
-    showBox()
-    setTimeout(() => { missonExam() }, 3000)
-} else if (_l.pathname.includes('/exam/test/reVersionPaperMarkContentNew')) {
-    setting.share && (() => {
-        showBox()
-        // setTimeout(() => { uploadExam() }, 3000)
-    })()
-} else if (_l.pathname.includes('/mooc2/work/dowork')) {
-    showBox()
-    setTimeout(() => { missonHomeWork() }, 3000)
-} else if (_l.pathname.includes('/mooc2/work/view')) {
-    setting.share && (() => {
-        showBox()
-        // setTimeout(() => { uploadHomeWork() }, 3000)
-    })()
-} else if (_l.pathname.includes('/work/phone/doHomeWork')) {
-    _oldal = _w.alert
-    _w.alert = function (msg) {
-        if (msg == '保存成功') {
+
+    function startObservers() {
+        if (observerStarted || !window.MutationObserver || !document.documentElement) {
             return;
         }
-        return _oldal(msg)
+        observerStarted = true;
+        var observer = new MutationObserver(function () {
+            relaxSelectionLimit();
+            unlockUeEditors();
+        });
+
+        observer.observe(document.documentElement, {
+            subtree: true,
+            childList: true,
+            attributes: true,
+            attributeFilter: ['style', 'onselectstart']
+        });
     }
-    _oldcf = _w.confirm
-    _w.confirm = function (msg) {
-        if (msg.includes('确认提交') || msg.includes('未做完')) {
-            return true
+
+    function schedule() {
+        enforce();
+        setTimeout(enforce, 500);
+        setTimeout(enforce, 1500);
+        setTimeout(enforce, 3000);
+    }
+
+    function init() {
+        removeDebuggerLimit();
+        schedule();
+        startObservers();
+    }
+
+    return {
+        init: init,
+        enforce: enforce
+    };
+})();
+
+var UiManager = (function () {
+    function getStorage(key, fallbackValue) {
+        var value = localStorage.getItem(key);
+        return value === null ? fallbackValue : value;
+    }
+
+    function setStorage(key, value) {
+        localStorage.setItem(key, value);
+    }
+
+    function panel() {
+        return $(PANEL_SELECTOR, window.parent.document).length ? $(PANEL_SELECTOR, window.parent.document) : $(PANEL_SELECTOR);
+    }
+
+    function panelLog() {
+        return $(PANEL_LOG_SELECTOR, window.parent.document).length ? $(PANEL_LOG_SELECTOR, window.parent.document) : $(PANEL_LOG_SELECTOR);
+    }
+
+    function applyPanelVisibility() {
+        var isHidden = getStorage(STORAGE_KEYS.showBox, 'show') === 'hide';
+        var $panel = panel();
+        if (!$panel.length) {
+            return;
         }
-        return _oldcf(msg)
+        $panel.css('display', isHidden ? 'none' : 'block');
+        $panel.css('opacity', isHidden ? '0' : '1');
     }
-} else if (_l.pathname.includes('/mooc2/exam/exam-list')) {
-    // Swal.fire('ChatGPT学习通助手提示', '注意：请谨慎使用脚本考试，开始考试之前请确保该账号已激活脚本。', 'info')
-} else if (_l.pathname == '/mycourse/stu') {
-    checkBrowser()
-} else {
-    // console.log(_l.pathname)
+
+    function togglePanelVisibility(forceVisible) {
+        var shouldShow = typeof forceVisible === 'boolean'
+            ? forceVisible
+            : getStorage(STORAGE_KEYS.showBox, 'show') === 'hide';
+        setStorage(STORAGE_KEYS.showBox, shouldShow ? 'show' : 'hide');
+        applyPanelVisibility();
+        if (shouldShow) {
+            logger('F9显隐界面', 'green');
+        }
+    }
+
+    function initModelSelector() {
+        var selectElement = $('#modelSelect');
+        if (!selectElement.length || selectElement.data('cxBound')) {
+            return;
+        }
+        selectElement.data('cxBound', true);
+        selectElement.val(getStorage(STORAGE_KEYS.model, _defaultModel));
+        selectElement.on('change', function () {
+            setStorage(STORAGE_KEYS.model, selectElement.val());
+            $('#userInfo').html('✅ 自建API已就绪 · 模型: ' + selectElement.val());
+        });
+    }
+
+    function updateCheckboxStorage(event) {
+        var checkbox = event.target;
+        setStorage(checkbox.id, checkbox.checked);
+    }
+
+    function ensureDefaultSettings() {
+        if (localStorage.getItem(STORAGE_KEYS.alterTitle) === null) {
+            setStorage(STORAGE_KEYS.alterTitle, 'true');
+        }
+        PANEL_CHECKBOX_SETTINGS.forEach(function (settingId) {
+            var storageKey = STORAGE_KEYS[settingId];
+            if (localStorage.getItem(storageKey) === null && setting[settingId] !== undefined) {
+                setStorage(storageKey, String(Boolean(setting[settingId])));
+            }
+        });
+    }
+
+    function bindPanelControls() {
+        var moreSettingsBtn = document.getElementById('moreSettingsBtn');
+        var moreSettings = document.getElementById('moreSettings');
+        var userInfo = document.getElementById('userInfo');
+        if (moreSettingsBtn && !moreSettingsBtn.dataset.cxBound) {
+            moreSettingsBtn.dataset.cxBound = 'true';
+            moreSettingsBtn.addEventListener('click', function () {
+                var isOpen = moreSettings.style.display !== 'none';
+                userInfo.style.display = isOpen ? 'block' : 'none';
+                moreSettings.style.display = isOpen ? 'none' : 'block';
+                moreSettingsBtn.textContent = isOpen ? '设置' : '返回';
+            });
+        }
+
+        PANEL_CHECKBOX_SETTINGS.forEach(function (settingId) {
+            var checkbox = document.getElementById('GPTJsSetting.' + settingId);
+            if (!checkbox || checkbox.dataset.cxBound) {
+                return;
+            }
+            checkbox.dataset.cxBound = 'true';
+            checkbox.checked = getStorage(STORAGE_KEYS[settingId], String(Boolean(setting[settingId]))) === 'true';
+            checkbox.addEventListener('change', updateCheckboxStorage);
+        });
+    }
+
+    function bindGlobalHotkeys() {
+        $(document).off('keydown.cxPanelToggle').on('keydown.cxPanelToggle', function (e) {
+            if (e.keyCode === 120 && $(NOTICE_SELECTOR)[0] !== undefined) {
+                togglePanelVisibility();
+            }
+        });
+    }
+
+    function initAfterPanelRender() {
+        ensureDefaultSettings();
+        initModelSelector();
+        bindPanelControls();
+        applyPanelVisibility();
+    }
+
+    return {
+        initAfterPanelRender: initAfterPanelRender,
+        bindGlobalHotkeys: bindGlobalHotkeys,
+        applyPanelVisibility: applyPanelVisibility,
+        panelLog: panelLog
+    };
+})();
+
+function initializePageExperience() {
+    $('.navshow').find('a:contains(体验新版)')[0] ? $('.navshow').find('a:contains(体验新版)')[0].click() : '';
+    setting.decrypt ? decryptFont() : '';
+    UiManager.bindGlobalHotkeys();
 }
+
+function bootstrapByRoute() {
+    if (_l.hostname == 'i.mooc.chaoxing.com' || _l.hostname == 'i.chaoxing.com') {
+        return;
+    }
+
+    if (_l.pathname == '/login' && setting.autoLogin) {
+        showBox();
+        setTimeout(function () { autoLogin(); }, 3000);
+        return;
+    }
+
+    if (_l.pathname.includes('/mycourse/studentstudy')) {
+        showBox();
+        $('#ne-21log', window.parent.document).html('初始化完毕！');
+        return;
+    }
+
+    if (_l.pathname.includes('/knowledge/cards')) {
+        var params = getTaskParams();
+        if (params == null || params == '$mArg' || $.parseJSON(params)['attachments'].length <= 0) {
+            logger('无任务点可处理，即将跳转页面', 'red');
+            toNext();
+            return;
+        }
+        setTimeout(function () {
+            top.checkJob ? top.checkJob = function () { return false; } : true;
+            _domList = [];
+            _mlist = $.parseJSON(params)['attachments'];
+            _defaults = $.parseJSON(params)['defaults'];
+            $.each($('.wrap .ans-cc .ans-attach-ct'), function (i, t) {
+                _domList.push($(t).find('iframe'));
+            });
+            missonStart();
+        }, 3000);
+        return;
+    }
+
+    if (_l.pathname.includes('/exam/test/reVersionTestStartNew')) {
+        showBox();
+        setTimeout(function () { missonExam(); }, 3000);
+        return;
+    }
+
+    if (_l.pathname.includes('/exam/test/reVersionPaperMarkContentNew')) {
+        if (setting.share) {
+            showBox();
+        }
+        return;
+    }
+
+    if (_l.pathname.includes('/mooc2/work/dowork')) {
+        showBox();
+        setTimeout(function () { missonHomeWork(); }, 3000);
+        return;
+    }
+
+    if (_l.pathname.includes('/mooc2/work/view')) {
+        if (setting.share) {
+            showBox();
+        }
+        return;
+    }
+
+    if (_l.pathname.includes('/work/phone/doHomeWork')) {
+        _oldal = _w.alert;
+        _w.alert = function (msg) {
+            if (msg == '保存成功') {
+                return;
+            }
+            return _oldal(msg);
+        };
+        _oldcf = _w.confirm;
+        _w.confirm = function (msg) {
+            if (msg.includes('确认提交') || msg.includes('未做完')) {
+                return true;
+            }
+            return _oldcf(msg);
+        };
+        return;
+    }
+
+    if (_l.pathname.includes('/mooc2/exam/exam-list')) {
+        return;
+    }
+
+    if (_l.pathname == '/mycourse/stu') {
+        checkBrowser();
+    }
+}
+
+CopyLimitManager.init();
+initializePageExperience();
+window.addEventListener('load', function () {
+    UiManager.initAfterPanelRender();
+    CopyLimitManager.enforce();
+});
+bootstrapByRoute();
 
 function checkBrowser() {
     var userAgent = navigator.userAgent
@@ -302,34 +477,6 @@ function sleep(time) {
         }
     }
 }
-// 更多设置
-var moreSettingsBtn = document.getElementById('moreSettingsBtn');
-var moreSettings = document.getElementById('moreSettings');
-var userInfo = document.getElementById('userInfo');
-var isSettingsVisible = false;
-
-moreSettingsBtn.addEventListener('click', function () {
-    userInfo.style.display = isSettingsVisible ? 'block' : 'none';
-    moreSettings.style.display = isSettingsVisible ? 'none' : 'block';
-    moreSettingsBtn.textContent = isSettingsVisible ? '设置' : '返回';
-    isSettingsVisible = !isSettingsVisible;
-});
-
-// 循环添加事件监听器
-['sub', 'force', 'examTurn', 'goodStudent', 'alterTitle'].forEach(function (settingId) {
-    var checkbox = document.getElementById('GPTJsSetting.' + settingId);
-    checkbox.addEventListener('change', updateLocalStorage);
-    checkbox.checked = localStorage.getItem('GPTJsSetting.' + settingId) === 'true';
-    // 检查本地存储修改题目是否为空，如果为空，则设置默认值为true
-    if (localStorage.getItem('GPTJsSetting.' + 'alterTitle') === null) {
-        localStorage.setItem('GPTJsSetting.' + 'alterTitle', 'true');
-    }
-});
-// 更新本地存储
-function updateLocalStorage(event) {
-    var checkbox = event.target;
-    localStorage.setItem(checkbox.id, checkbox.checked);
-}
 function showBox() {
     //公告&充值
     if (setting.showBox && top.document.querySelector('#ne-21notice') == undefined) {
@@ -344,6 +491,8 @@ function showBox() {
             <p></p>
             <input type="checkbox" id="GPTJsSetting.goodStudent"> <label for="GPTJsSetting.goodStudent">答案加粗不选择</label>
             <input type="checkbox" id="GPTJsSetting.alterTitle" checked> <label for="GPTJsSetting.alterTitle">答案插入题目后</label>
+            <p></p>
+            <input type="checkbox" id="GPTJsSetting.matchDebug"> <label for="GPTJsSetting.matchDebug">答案匹配调试日志</label>
         </div>
         <div id="ne-21log" style="max-height:100px;"></div>
     </div>`;
@@ -360,7 +509,7 @@ function showBox() {
  <div>当前学习通账号UID:`+ _u + `</div>
  <div style="font-size:10px;color:#888;">使用自建API · 无需积分充值</div>
  <select style="border: 1px solid gray;border-radius: 4px;padding: 3px;font-size: 10px;" id="modelSelect">
- <option value="deepseek-ai/deepseek-v3.2">DeepSeek-V3.2(推荐)</option>
+ <option value="deepseek-default">DeepSeek-Free(本地推荐)</option>
  <option value="z-ai/glm-5.1">GLM-5.1</option>
  <option value="z-ai/glm5">GLM-5</option>
  <option value="moonshotai/kimi-k2-instruct">Kimi-K2</option>
@@ -1003,10 +1152,14 @@ function startDoPhoneTimu(index, TimuList) {
             if (check_answer_flag == 0) {
                 getAnswer(_type, _question).then((agrs) => {
                     _answerTmpArr = $(TimuList[index]).find('.answerList.singleChoice li')
+                    let _rawOptions = []
                     $.each(_answerTmpArr, (i, t) => {
-                        _a.push(tidyStr($(t).html()).replace(/^[A-Z]\s*\n\s*/, '').trim())
+                        let _rawOption = tidyStr($(t).html())
+                        _rawOptions.push(_rawOption)
+                        _a.push(normalizeAnswerText($(t).html()))
                     })
-                    let _i = _a.findIndex((item) => item == agrs)
+                    let _i = findBestAnswerIndex(_a, agrs)
+                    logSingleMatchDebug('手机单选', _question, _rawOptions, agrs, _i)
                     if (_i == -1) {
                         logger('AI无法完美匹配正确答案,请手动选择，跳过此题', 'red')
                         // setting.sub = 0
@@ -1052,12 +1205,18 @@ function startDoPhoneTimu(index, TimuList) {
                         setTimeout(() => { startDoPhoneTimu(index + 1, TimuList) }, setting.time)
                     } else {
                         _answerTmpArr = $(TimuList[index]).find('.answerList.multiChoice li')
+                        let _rawOptions = []
+                        let _matchedOptions = []
                         $.each(_answerTmpArr, (i, t) => {
-                            let _tt = tidyStr($(t).html()).replace(/^[A-Z]\s*\n\s*/, '').trim()
-                            if (agrs.indexOf(_tt) != -1) {
+                            let _rawOption = tidyStr($(t).html())
+                            _rawOptions.push(_rawOption)
+                            let _tt = normalizeAnswerText($(t).html())
+                            if (isAnswerMatch(_tt, agrs)) {
+                                _matchedOptions.push(_rawOption)
                                 setTimeout(() => { $(_answerTmpArr[i]).click() }, 300)
                             }
                         })
+                        logMultiMatchDebug('手机多选', _question, _rawOptions, agrs, _matchedOptions)
                         let check = 0
                         setTimeout(() => {
                             $.each(_answerTmpArr, (i, t) => {
@@ -1118,9 +1277,14 @@ function startDoPhoneTimu(index, TimuList) {
                     localStorage.setItem('GPTJsSetting.sub', false)
                     setTimeout(() => { startDoPhoneTimu(index + 1, TimuList) }, setting.time)
                 } else {
-                    let _true = '正确|是|对|√|T|ri'
                     _answerTmpArr = $(TimuList[index]).find('.answerList.panduan li')
-                    if (_true.indexOf(agrs) != -1) {
+                    let _rawOptions = []
+                    $.each(_answerTmpArr, (i, t) => {
+                        _rawOptions.push(tidyStr($(t).text()) || tidyStr($(t).html()))
+                    })
+                    let _resolvedAnswer = isJudgmentTrue(agrs) ? '对' : '错'
+                    logJudgmentMatchDebug('手机判断', _question, _rawOptions, agrs, _resolvedAnswer, findBestAnswerIndex(_rawOptions, _resolvedAnswer))
+                    if (isJudgmentTrue(agrs)) {
                         $.each(_answerTmpArr, (i, t) => {
                             if ($(t).attr('val-param') == 'true') {
                                 $(t).click()
@@ -1192,8 +1356,11 @@ function startDoPhoneTimu(index, TimuList) {
                                 logger('AI无法匹配答案，请手动完成', 'red');
                                 localStorage.setItem('GPTJsSetting.sub', false);
                             } else {
-                                setTimeout(() => { UE.getEditor(editorId).setContent(agrs) }, 300);
-                                logger('材料题自动答题成功，准备切换下一题', 'green');
+                                let filled = fillShortAnswerTargets($(TimuList[index]), agrs);
+                                if (!filled && editorId) {
+                                    filled = trySetEditorContent(editorId, agrs);
+                                }
+                                logger(filled ? '材料题自动答题成功，准备切换下一题' : '材料题找到答案但未成功写入，请手动检查', filled ? 'green' : 'red');
                             }
                             setTimeout(() => { startDoPhoneTimu(index + 1, TimuList) }, setting.time);
                         }).catch((agrs) => {
@@ -1218,8 +1385,8 @@ function startDoPhoneTimu(index, TimuList) {
                             logger('AI无法匹配答案，请手动完成', 'red');
                             localStorage.setItem('GPTJsSetting.sub', false);
                         } else {
-                            $(normalTextareas[0]).val(agrs);
-                            logger('简答题自动答题成功，准备切换下一题', 'green');
+                            let filled = fillShortAnswerTargets($(TimuList[index]), agrs);
+                            logger(filled ? '简答题自动答题成功，准备切换下一题' : '简答题找到答案但未成功写入，请手动检查', filled ? 'green' : 'red');
                         }
                         setTimeout(() => { startDoPhoneTimu(index + 1, TimuList) }, setting.time);
                     }).catch((agrs) => {
@@ -1254,8 +1421,11 @@ function startDoPhoneTimu(index, TimuList) {
                                         logger('AI无法匹配答案，请手动完成', 'red');
                                         localStorage.setItem('GPTJsSetting.sub', false);
                                     } else {
-                                        setTimeout(() => { UE.getEditor(editorId).setContent(agrs) }, 300);
-                                        logger('使用脚本找到的编辑器ID回答成功', 'green');
+                                        let filled = fillShortAnswerTargets($(TimuList[index]), agrs);
+                                        if (!filled && editorId) {
+                                            filled = trySetEditorContent(editorId, agrs);
+                                        }
+                                        logger(filled ? '使用脚本找到的编辑器ID回答成功' : '找到编辑器ID但未成功写入答案，请手动检查', filled ? 'green' : 'red');
                                     }
                                     setTimeout(() => { startDoPhoneTimu(index + 1, TimuList) }, setting.time);
                                 }).catch((agrs) => {
@@ -1311,17 +1481,18 @@ function startDoPhoneCyWork(index, doms, phoneWeb) {
         return
     }
     logger('等待测验框架加载...', 'purple')
-    getElement($(doms[index]).contents()[0], 'iframe').then(element => {
-        let workIframe = element
-        if (workIframe.length == 0) {
-            setTimeout(() => { startDoPhoneCyWork(index, doms) }, 5000)
+    waitForWorkIframe(doms[index], 12000).then(workIframe => {
+        if (!workIframe) {
+            logger('测验框架加载超时，5 秒后重试当前测验卡', 'red')
+            setTimeout(() => { startDoPhoneCyWork(index, doms, phoneWeb) }, 5000)
+            return
         }
         // let workStatus = $(workIframe).contents().find('.CeYan .ZyTop h3 span:nth-child(1)').text().trim()
         let workStatus = $(workIframe).contents().find('.newTestCon .newTestTitle .testTit_status').text().trim()
         // console.log(workStatus)
         if (!workStatus) {
-            _domList.splice(0, 1)
-            setTimeout(missonStart, 2000)
+            logger('未读取到测验状态，5 秒后重试当前测验卡', 'red')
+            setTimeout(() => { startDoPhoneCyWork(index, doms, phoneWeb) }, 5000)
             return
         }
         if (setting.share && workStatus.indexOf("已完成") != -1) {
@@ -1354,15 +1525,16 @@ function startDoCyWork(index, doms) {
         return
     }
     logger('等待测验框架加载...', 'purple')
-    getElement($(doms[index]).contents()[0], 'iframe').then(element => {
-        let workIframe = element
-        if (workIframe.length == 0) {
+    waitForWorkIframe(doms[index], 12000).then(workIframe => {
+        if (!workIframe) {
+            logger('测验框架加载超时，5 秒后重试当前测验卡', 'red')
             setTimeout(() => { startDoCyWork(index, doms) }, 5000)
+            return
         }
         let workStatus = $(workIframe).contents().find(".newTestCon .newTestTitle .testTit_status").text().trim()
         if (!workStatus) {
-            _domList.splice(0, 1)
-            setTimeout(missonStart, 2000)
+            logger('未读取到测验状态，5 秒后重试当前测验卡', 'red')
+            setTimeout(() => { startDoCyWork(index, doms) }, 5000)
             return
         }
         if (setting.share && workStatus.indexOf("已完成") != -1) {
@@ -1386,6 +1558,28 @@ function startDoCyWork(index, doms) {
 }
 
 
+
+function waitForWorkIframe(dom, timeout = 12000) {
+    return new Promise(resolve => {
+        let parent = $(dom).contents()[0]
+        if (!parent || typeof parent.querySelector !== 'function') {
+            resolve(null)
+            return
+        }
+
+        let directIframe = parent.querySelector('iframe')
+        if (directIframe) {
+            resolve(directIframe)
+            return
+        }
+
+        getElement(parent, 'iframe', timeout).then(element => {
+            resolve(element || parent.querySelector('iframe') || null)
+        }).catch(() => {
+            resolve(parent.querySelector('iframe') || null)
+        })
+    })
+}
 
 function getElement(parent, selector, timeout = 0) {
     /**
@@ -2615,6 +2809,14 @@ function getAnswer(_t, _q, retryCount = 0) {
  let _model = localStorage.getItem('GPTJsSetting.model') || _defaultModel;
  let requestCompleted = false;
  let longWaitTimer = null;
+ let questionTypeLabels = {
+ '0': '单选题',
+ '1': '多选题',
+ '2': '填空题',
+ '3': '判断题',
+ '4': '简答题'
+ };
+ let questionTypeLabel = questionTypeLabels[String(_t)] || '未知题型';
 
  // 构建 system prompt，指导模型按要求格式回答
  let systemPrompt = '你是一个学习通作业考试助手。请严格按照以下规则回答：\n' +
@@ -2622,8 +2824,13 @@ function getAnswer(_t, _q, retryCount = 0) {
  '2. 多选题：用"#"分割多个答案，每个答案只写选项文本内容\n' +
  '3. 填空题：用"|"分割多个空的答案\n' +
  '4. 判断题：只回答"正确"或"错误"\n' +
- '5. 简答题：简洁回答，不超过50字\n' +
+ '5. 简答题：只输出可直接填入答题框的最终答案，不超过50字，不要使用“第一个问题/第二个问题/第三个问题/答案是/因此/即”等引导语，不要复述题干，不要解释\n' +
  '6. 只输出答案本身，不要有任何前缀、解释或多余内容';
+
+ let userPrompt = '题型：' + questionTypeLabel + '\n' + _q;
+ if (String(_t) === '4') {
+ userPrompt += '\n请直接给出可填写的最终答案，不要使用序号、冒号、引导句或解释。';
+ }
 
  // 5分钟超时监控
  longWaitTimer = setTimeout(() => {
@@ -2650,7 +2857,7 @@ function getAnswer(_t, _q, retryCount = 0) {
  model: _model,
  messages: [
  { role: 'system', content: systemPrompt },
- { role: 'user', content: _q }
+ { role: 'user', content: userPrompt }
  ],
  temperature: 0.3,
  max_tokens: 1024
@@ -2676,10 +2883,7 @@ function getAnswer(_t, _q, retryCount = 0) {
  if (xhr.status == 200) {
  try {
  var _answer = obj.choices[0].message.content.trim();
- // 去掉末尾句号
- _answer = _answer.replace(/。$/, '').trim();
- // 去掉开头的 A/B/C/D 前缀（如 "A xxx" -> "xxx"）
- _answer = _answer.replace(/^[A-Z]\s*\n?\s*/, '').trim();
+ _answer = cleanupAiAnswer(_t, _answer, _q);
  if (_answer) {
  logger("答案:" + _answer, 'purple')
  resolve(_answer)
@@ -2823,8 +3027,11 @@ function startDoWork(index, doms, c, TiMuList) {
             });
             mergedAnswers = mergedAnswers.join("|");
             _question = "单选题:" + _question + '\n' + mergedAnswers
+            let _rawOptions = []
             $.each(_answerTmpArr, (i, t) => {
-                _a.push(tidyStr($(t).html()))
+                let _rawOption = tidyStr($(t).html())
+                _rawOptions.push(_rawOption)
+                _a.push(normalizeAnswerText($(t).html()))
             })
             getAnswer(_TimuType, _question).then((agrs) => {
                 if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
@@ -2832,7 +3039,8 @@ function startDoWork(index, doms, c, TiMuList) {
                     let timuele = $(TiMuList[c]).find('.Zy_TItle.clearfix > div')
                     timuele.html(timuele.html() + agrs)
                 }
-                let _i = _a.findIndex((item) => item == agrs)
+                let _i = findBestAnswerIndex(_a, agrs)
+                logSingleMatchDebug('网页单选', _question, _rawOptions, agrs, _i)
                 if (_i == -1) {
                     logger('AI无法完美匹配正确答案,请手动选择，跳过', 'red')
                     localStorage.setItem('GPTJsSetting.sub', false)
@@ -2860,12 +3068,18 @@ function startDoWork(index, doms, c, TiMuList) {
                     let timuele = $(TiMuList[c]).find('.Zy_TItle.clearfix > div')
                     timuele.html(timuele.html() + agrs)
                 }
+                let _rawOptions = []
+                let _matchedOptions = []
                 $.each(_answerTmpArr, (i, t) => {
-                    if (agrs.indexOf(tidyStr($(t).html())) != -1) {
+                    let _rawOption = tidyStr($(t).html())
+                    _rawOptions.push(_rawOption)
+                    if (isAnswerMatch(normalizeAnswerText($(t).html()), agrs)) {
+                        _matchedOptions.push(_rawOption)
                         $(_answerTmpArr[i]).parent().click();
                         _a.push(['A', 'B', 'C', 'D', 'E', 'F', 'G'][i])
                     }
                 })
+                logMultiMatchDebug('网页多选', _question, _rawOptions, agrs, _matchedOptions)
                 let id = getStr($(TiMuList[c]).find('.Zy_ulTop li:nth-child(1)').attr('onclick'), 'addcheck(', ');').replace('(', '').replace(')', '')
                 if (_a.length <= 0) {
                     logger('AI无法完美匹配正确答案,请手动选择，跳过', 'red')
@@ -2901,9 +3115,11 @@ function startDoWork(index, doms, c, TiMuList) {
             break
         case 3:
             _answerTmpArr = $(TiMuList[c]).find(".Zy_ulTop li").find("a");
-            let _true = "正确|是|对|√|T|ri";
+            let _rawJudgeOptions = []
             $.each(_answerTmpArr, (i, t) => {
-                _a.push(tidyStr($(t).html()));
+                let _rawOption = tidyStr($(t).html())
+                _rawJudgeOptions.push(_rawOption)
+                _a.push(normalizeAnswerText($(t).html()));
             });
             _question = "判断题，只回答正确或错误:" + _question
             getAnswer(_TimuType, _question).then((agrs) => {
@@ -2912,8 +3128,10 @@ function startDoWork(index, doms, c, TiMuList) {
                     let timuele = $(TiMuList[c]).find('.Zy_TItle.clearfix > div')
                     timuele.html(timuele.html() + agrs)
                 }
-                agrs = _true.indexOf(agrs) != -1 ? "对" : "错";
-                let _i = _a.findIndex((item) => item == agrs);
+                let _rawAnswer = agrs;
+                agrs = isJudgmentTrue(agrs) ? "对" : "错";
+                let _i = findBestAnswerIndex(_a, agrs);
+                logJudgmentMatchDebug('网页判断', _question, _rawJudgeOptions, _rawAnswer, agrs, _i)
                 if (_i == -1) {
                     logger("未匹配到正确答案，跳过", "red");
                     localStorage.setItem('GPTJsSetting.sub', false)
@@ -2933,16 +3151,10 @@ function startDoWork(index, doms, c, TiMuList) {
             let _textareaLista = $(TiMuList[c]).find('.Zy_ulTk .XztiHover1')
             getAnswer(_TimuType, _question).then((agrs) => {
                 if (agrs == '暂无答案') {
-                    // setting.sub = 0
                     localStorage.setItem('GPTJsSetting.sub', false)
+                } else {
+                    fillShortAnswerTargets($(TiMuList[c]), agrs)
                 }
-                let _answerList = agrs.split("#")
-                $.each(_textareaLista, (i, t) => {
-                    setTimeout(() => {
-                        $(t).find('#ueditor_' + i).contents().find('.view p').html(_answerList[i]);
-                        $(t).find('textarea').html('<p>' + _answerList[i] + '</p>')
-                    }, 300)
-                })
                 setTimeout(() => { startDoWork(index, doms, c + 1, TiMuList) }, setting.time)
             }).catch((agrs) => {
                 setTimeout(() => { startDoWork(index, doms, c + 1, TiMuList) }, setting.time)
@@ -2957,6 +3169,148 @@ function uploadAnswer(a) {
  logger('答案收录功能已关闭（自建API版）', 'gray')
  resolve()
  })
+}
+
+function isMatchDebugEnabled() {
+    return localStorage.getItem('GPTJsSetting.matchDebug') === 'true';
+}
+
+function debugMatchLog(str, color) {
+    if (!isMatchDebugEnabled()) {
+        return;
+    }
+    logger('[匹配调试] ' + str, color || '#999');
+}
+
+function setTextareaAnswerValue(target, answerHtml) {
+    if (!target || !target.length) {
+        return false;
+    }
+    let answerText = String(answerHtml || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
+    target.val(answerText);
+    target.text(answerText);
+    target.html(answerText);
+    ['input', 'change', 'blur'].forEach((eventName) => {
+        target.trigger(eventName);
+        if (target[0]) {
+            target[0].dispatchEvent(new Event(eventName, { bubbles: true }));
+        }
+    });
+    return target.val() === answerText || target.text() === answerText;
+}
+
+function trySetEditorContent(editorId, answerHtml) {
+    if (!editorId || typeof UE === 'undefined') {
+        return false;
+    }
+    let editor = UE.getEditor(editorId);
+    if (!editor) {
+        return false;
+    }
+    try {
+        editor.ready(function () {
+            editor.setContent(String(answerHtml || ''));
+            if (typeof editor.fireEvent === 'function') {
+                editor.fireEvent('contentChange');
+            }
+            if (editor.body) {
+                editor.body.dispatchEvent(new Event('input', { bubbles: true }));
+                editor.body.dispatchEvent(new Event('blur', { bubbles: true }));
+            }
+        });
+        return true;
+    } catch (error) {
+        logger('设置富文本答案失败: ' + error, 'red');
+        return false;
+    }
+}
+
+function fillShortAnswerTargets(scope, answerHtml) {
+    let filled = false;
+    let filledTargets = [];
+    let root = scope && scope.jquery ? scope : $(scope);
+
+    root.find('textarea[name^="answerEditor"], textarea[id^="ueditor_"], .answerMain textarea, .blanktextarea, .divText textarea, .eidtDiv textarea, textarea').each((_, el) => {
+        let current = $(el);
+        let success = setTextareaAnswerValue(current, answerHtml);
+        if (success) {
+            filled = true;
+            filledTargets.push(current.attr('name') || current.attr('id') || current.attr('class') || 'textarea');
+        }
+    });
+
+    root.find('script').each((_, scriptEl) => {
+        let scriptContent = $(scriptEl).html() || '';
+        let matches = scriptContent.match(/UE\.getEditor\(['"](.*?)['"]/g) || [];
+        matches.forEach((matchItem) => {
+            let matched = matchItem.match(/UE\.getEditor\(['"](.*?)['"]/);
+            if (matched && matched[1] && trySetEditorContent(matched[1], answerHtml)) {
+                filled = true;
+                filledTargets.push('UE:' + matched[1]);
+            }
+        });
+    });
+
+    root.find('textarea[name^="answerEditor"], textarea[id^="ueditor_"], .edui-editor textarea').each((_, el) => {
+        let editorId = $(el).attr('id');
+        if (editorId && trySetEditorContent(editorId, answerHtml)) {
+            filled = true;
+            filledTargets.push('UE:' + editorId);
+        }
+    });
+
+    if (isMatchDebugEnabled()) {
+        debugMatchLog('简答题填充目标: ' + JSON.stringify(filledTargets), filled ? 'green' : 'red');
+    }
+    return filled;
+}
+
+function logSingleMatchDebug(scene, questionText, options, aiAnswer, matchedIndex) {
+    if (!isMatchDebugEnabled()) {
+        return;
+    }
+    let normalizedOptions = Array.isArray(options) ? options.map((item) => normalizeAnswerText(item)) : [];
+    let looseNormalizedOptions = Array.isArray(options) ? options.map((item) => normalizeAnswerLooseText(item)) : [];
+    let normalizedAnswer = normalizeAnswerText(aiAnswer);
+    let looseNormalizedAnswer = normalizeAnswerLooseText(aiAnswer);
+    debugMatchLog(scene + ' | 题目: ' + tidyQuestion(questionText), '#999');
+    debugMatchLog(scene + ' | AI原始答案: ' + String(aiAnswer || ''), '#999');
+    debugMatchLog(scene + ' | AI归一化答案: ' + normalizedAnswer, '#999');
+    debugMatchLog(scene + ' | AI宽松归一化答案: ' + looseNormalizedAnswer, '#999');
+    debugMatchLog(scene + ' | 选项原始值: ' + JSON.stringify(options || []), '#999');
+    debugMatchLog(scene + ' | 选项归一化: ' + JSON.stringify(normalizedOptions), '#999');
+    debugMatchLog(scene + ' | 选项宽松归一化: ' + JSON.stringify(looseNormalizedOptions), '#999');
+    debugMatchLog(scene + ' | 匹配结果索引: ' + matchedIndex, matchedIndex === -1 ? 'red' : 'green');
+}
+
+function logMultiMatchDebug(scene, questionText, options, aiAnswer, matchedOptions) {
+    if (!isMatchDebugEnabled()) {
+        return;
+    }
+    let normalizedOptions = Array.isArray(options) ? options.map((item) => normalizeAnswerText(item)) : [];
+    let looseNormalizedOptions = Array.isArray(options) ? options.map((item) => normalizeAnswerLooseText(item)) : [];
+    let normalizedAnswer = normalizeAnswerText(aiAnswer);
+    let looseNormalizedAnswer = normalizeAnswerLooseText(aiAnswer);
+    let normalizedMatchedOptions = Array.isArray(matchedOptions) ? matchedOptions.map((item) => normalizeAnswerText(item)) : [];
+    debugMatchLog(scene + ' | 题目: ' + tidyQuestion(questionText), '#999');
+    debugMatchLog(scene + ' | AI原始答案: ' + String(aiAnswer || ''), '#999');
+    debugMatchLog(scene + ' | AI归一化答案: ' + normalizedAnswer, '#999');
+    debugMatchLog(scene + ' | AI宽松归一化答案: ' + looseNormalizedAnswer, '#999');
+    debugMatchLog(scene + ' | 选项原始值: ' + JSON.stringify(options || []), '#999');
+    debugMatchLog(scene + ' | 选项归一化: ' + JSON.stringify(normalizedOptions), '#999');
+    debugMatchLog(scene + ' | 选项宽松归一化: ' + JSON.stringify(looseNormalizedOptions), '#999');
+    debugMatchLog(scene + ' | 命中选项: ' + JSON.stringify(matchedOptions || []), normalizedMatchedOptions.length ? 'green' : 'red');
+}
+
+function logJudgmentMatchDebug(scene, questionText, options, aiAnswer, resolvedAnswer, matchedIndex) {
+    if (!isMatchDebugEnabled()) {
+        return;
+    }
+    debugMatchLog(scene + ' | 题目: ' + tidyQuestion(questionText), '#999');
+    debugMatchLog(scene + ' | AI原始答案: ' + String(aiAnswer || ''), '#999');
+    debugMatchLog(scene + ' | 归一化判定结果: ' + resolvedAnswer, '#999');
+    debugMatchLog(scene + ' | 候选选项: ' + JSON.stringify(options || []), '#999');
+    debugMatchLog(scene + ' | 匹配结果索引: ' + matchedIndex, matchedIndex === -1 ? 'red' : 'green');
 }
 
 function switchMission() {
@@ -2981,6 +3335,119 @@ function tidyQuestion(s) {
     } else {
         return null
     }
+}
+
+function normalizeAnswerText(s) {
+    return String(tidyStr(s) || '')
+        .replace(/^[A-ZＡ-Ｚ]\s*[\.．、:：]?\s*/i, '')
+        .replace(/[“”"'‘’「」『』]/g, '')
+        .replace(/[。．\.；;，,、：:!！?？]+$/g, '')
+        .replace(/（/g, '(')
+        .replace(/）/g, ')')
+        .replace(/\s+/g, '')
+        .trim();
+}
+
+function normalizeAnswerLooseText(s) {
+    return normalizeAnswerText(s)
+        .replace(/[，,、；;：:！!？?。．\.]/g, '')
+        .trim();
+}
+
+function cleanupAiAnswer(questionType, answerText, questionText) {
+    let answer = String(answerText || '').trim();
+    if (!answer) {
+        return '';
+    }
+
+    answer = answer.replace(/^```[\w-]*\s*/, '').replace(/```$/, '').trim();
+    answer = answer.replace(/^[A-ZＡ-Ｚ]\s*[\.．、:：]?\s*/i, '').trim();
+    answer = answer.replace(/^(答案|回答|答|结果)\s*[：:]\s*/i, '').trim();
+
+    if (String(questionType) === '4') {
+        let cleanedQuestion = tidyQuestion(questionText) || '';
+        let quotedQuestionPart = '';
+        let quotedQuestionMatch = cleanedQuestion.match(/[“"]([^“”"]{2,80})[”"]/);
+        if (quotedQuestionMatch && quotedQuestionMatch[1]) {
+            quotedQuestionPart = quotedQuestionMatch[1].trim();
+        }
+
+        answer = answer
+            .replace(/^第[一二三四五六七八九十百千万0-9]+个问题\s*[：:]\s*/i, '')
+            .replace(/^问题[一二三四五六七八九十百千万0-9]*\s*[：:]\s*/i, '')
+            .replace(/^(就是|即|因此|所以|故|应为|应该是)\s*/i, '')
+            .trim();
+
+        let quotedMatch = answer.match(/[“"]([^“”"]{2,80})[”"]/);
+        if (quotedMatch && quotedMatch[1]) {
+            answer = quotedMatch[1].trim();
+        }
+
+        answer = answer.replace(/[。．]+$/g, '').trim();
+
+        if (quotedQuestionPart) {
+            let normalizedAnswer = normalizeAnswerLooseText(answer);
+            let normalizedQuotedQuestionPart = normalizeAnswerLooseText(quotedQuestionPart);
+            let normalizedQuestion = normalizeAnswerLooseText(cleanedQuestion);
+            let asksWhichQuestion = /哪一个|哪个|第几个|哪一项|哪种/.test(cleanedQuestion);
+            let questionHintsQuotedText = normalizedQuotedQuestionPart && normalizedQuestion.includes(normalizedQuotedQuestionPart);
+            if (asksWhichQuestion && questionHintsQuotedText && normalizedAnswer && normalizedQuotedQuestionPart && normalizedAnswer !== normalizedQuotedQuestionPart) {
+                answer = quotedQuestionPart;
+            }
+        }
+    } else {
+        answer = answer.replace(/[。．]+$/g, '').trim();
+    }
+
+    return answer;
+}
+
+function isAnswerMatch(optionText, answerText) {
+    let optionNorm = normalizeAnswerText(optionText);
+    let answerNorm = normalizeAnswerText(answerText);
+    let optionLoose = normalizeAnswerLooseText(optionText);
+    let answerLoose = normalizeAnswerLooseText(answerText);
+    if ((!optionNorm && !optionLoose) || (!answerNorm && !answerLoose)) {
+        return false;
+    }
+    return optionNorm === answerNorm
+        || optionNorm.includes(answerNorm)
+        || answerNorm.includes(optionNorm)
+        || optionLoose === answerLoose
+        || optionLoose.includes(answerLoose)
+        || answerLoose.includes(optionLoose);
+}
+
+function findBestAnswerIndex(options, answerText) {
+    let answerNorm = normalizeAnswerText(answerText);
+    let answerLoose = normalizeAnswerLooseText(answerText);
+    if ((!answerNorm && !answerLoose) || !Array.isArray(options) || !options.length) {
+        return -1;
+    }
+    let normalizedOptions = options.map((item) => normalizeAnswerText(item));
+    let looseNormalizedOptions = options.map((item) => normalizeAnswerLooseText(item));
+    let exactIndex = normalizedOptions.findIndex((item) => item === answerNorm);
+    if (exactIndex !== -1) {
+        return exactIndex;
+    }
+    let containIndex = normalizedOptions.findIndex((item) => item && answerNorm && (item.includes(answerNorm) || answerNorm.includes(item)));
+    if (containIndex !== -1) {
+        return containIndex;
+    }
+    let looseExactIndex = looseNormalizedOptions.findIndex((item) => item === answerLoose);
+    if (looseExactIndex !== -1) {
+        return looseExactIndex;
+    }
+    return looseNormalizedOptions.findIndex((item) => item && answerLoose && (item.includes(answerLoose) || answerLoose.includes(item)));
+}
+
+function isJudgmentTrue(answerText) {
+    let answerNorm = normalizeAnswerText(answerText).toLowerCase();
+    if (!answerNorm) {
+        return false;
+    }
+    let trueAnswers = ['正确', '是', '对', '√', 'true', 't', 'ri'];
+    return trueAnswers.some((item) => answerNorm === item || answerNorm.includes(item) || item.includes(answerNorm));
 }
 
 
