@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name                ChatGPT学习通作业考试助手 v1.2.8
-// @version      1.2.7
+// @version 1.2.8
 // @description         本脚本【纯ChatGPT回复答案】 原作者:Ne-21【🥇操作简单】ChatGPT学习通助手，安装即可使用；推荐使用作业、考试自动答题【✨版本特性】版本特性:无题库数据库,全采用ChatGPT回复答案 · 🔓解除复制粘贴限制
 // @match               *://*.chaoxing.com/*
 // @connect api.bashijiuhou.com
