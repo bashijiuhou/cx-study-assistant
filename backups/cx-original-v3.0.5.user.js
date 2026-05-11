@@ -1,11 +1,15 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.1.0
-// @version             3.1.0
-// @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
+// @name                ChatGPT学习通作业考试助手
+// @version             3.0.5
+// @description         本脚本【采用ChatGPT,DeepSeek,Gemini等顶尖AI直接生成答案】 【🥇操作简单】ChatGPT学习通助手，安装即可使用；推荐使用作业、考试自动答题【✨版本特性】版本特性:无题库，全采用AI回复答案，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
-// @tag                 自建API
-// @connect api.bashijiuhou.com
+// @tag                 免费试用
+// @connect             911285.xyz
+// @connect             gptjs.808860.xyz
+// @connect             127.0.0.1
+// @connect             zhibo.chaoxing.com
+// @connect             chaoxing.com
 // @run-at              document-end
 // @grant               unsafeWindow
 // @grant               GM_xmlhttpRequest
@@ -13,8 +17,12 @@
 // @grant               GM_getValue
 // @grant               GM_info
 // @grant               GM_getResourceText
-// @icon https://api.bashijiuhou.com/logo.png
-// @homepage            https://github.com/bashijiuhou/cx-study-assistant
+// @require             https://gptjs.808860.xyz/libs/TyprMd5.js
+// @require             https://gptjs.808860.xyz/libs/sweetalert2-11.1.0.all.min.js
+// @require             https://gptjs.808860.xyz/libs/jquery-3.7.1.min.js
+// @resource            Table https://gptjs.808860.xyz/libs/table.json
+// @icon                data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDEiIGhlaWdodD0iNDEiIHZpZXdCb3g9IjAgMCA0MSA0MSIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBzdHJva2Utd2lkdGg9IjEuNSIgY2xhc3M9ImgtNiB3LTYiIHJvbGU9ImltZyI+PHRpdGxlPkNoYXRHUFQ8L3RpdGxlPjx0ZXh0IHg9Ii05OTk5IiB5PSItOTk5OSI+Q2hhdEdQVDwvdGV4dD48cGF0aCBkPSJNMzcuNTMyNCAxNi44NzA3QzM3Ljk4MDggMTUuNTI0MSAzOC4xMzYzIDE0LjA5NzQgMzcuOTg4NiAxMi42ODU5QzM3Ljg0MDkgMTEuMjc0NCAzNy4zOTM0IDkuOTEwNzYgMzYuNjc2IDguNjg2MjJDMzUuNjEyNiA2LjgzNDA0IDMzLjk4ODIgNS4zNjc2IDMyLjAzNzMgNC40OTg1QzMwLjA4NjQgMy42Mjk0MSAyNy45MDk4IDMuNDAyNTkgMjUuODIxNSAzLjg1MDc4QzI0Ljg3OTYgMi43ODkzIDIzLjcyMTkgMS45NDEyNSAyMi40MjU3IDEuMzYzNDFDMjEuMTI5NSAwLjc4NTU3NSAxOS43MjQ5IDAuNDkxMjY5IDE4LjMwNTggMC41MDAxOTdDMTYuMTcwOCAwLjQ5NTA0NCAxNC4wODkzIDEuMTY4MDMgMTIuMzYxNCAyLjQyMjE0QzEwLjYzMzUgMy42NzYyNCA5LjM0ODUzIDUuNDQ2NjYgOC42OTE3IDcuNDc4MTVDNy4zMDA4NSA3Ljc2Mjg2IDUuOTg2ODYgOC4zNDE0IDQuODM3NyA5LjE3NTA1QzMuNjg4NTQgMTAuMDA4NyAyLjczMDczIDExLjA3ODIgMi4wMjgzOSAxMi4zMTJDMC45NTY0NjQgMTQuMTU5MSAwLjQ5ODkwNSAxNi4yOTg4IDAuNzIxNjk4IDE4LjQyMjhDMC45NDQ0OTIgMjAuNTQ2NyAxLjgzNjEyIDIyLjU0NDkgMy4yNjggMjQuMTI5M0MyLjgxOTY2IDI1LjQ3NTkgMi42NjQxMyAyNi45MDI2IDIuODExODIgMjguMzE0MUMyLjk1OTUxIDI5LjcyNTYgMy40MDcwMSAzMS4wODkyIDQuMTI0MzcgMzIuMzEzOEM1LjE4NzkxIDM0LjE2NTkgNi44MTIzIDM1LjYzMjIgOC43NjMyMSAzNi41MDEzQzEwLjcxNDEgMzcuMzcwNCAxMi44OTA3IDM3LjU5NzMgMTQuOTc4OSAzNy4xNDkyQzE1LjkyMDggMzguMjEwNyAxNy4wNzg2IDM5LjA1ODcgMTguMzc0NyAzOS42MzY2QzE5LjY3MDkgNDAuMjE0NCAyMS4wNzU1IDQwLjUwODcgMjIuNDk0NiA0MC40OTk4QzI0LjYzMDcgNDAuNTA1NCAyNi43MTMzIDM5LjgzMjEgMjguNDQxOCAzOC41NzcyQzMwLjE3MDQgMzcuMzIyMyAzMS40NTU2IDM1LjU1MDYgMzIuMTExOSAzMy41MTc5QzMzLjUwMjcgMzMuMjMzMiAzNC44MTY3IDMyLjY1NDcgMzUuOTY1OSAzMS44MjFDMzcuMTE1IDMwLjk4NzQgMzguMDcyOCAyOS45MTc4IDM4Ljc3NTIgMjguNjg0QzM5Ljg0NTggMjYuODM3MSA0MC4zMDIzIDI0LjY5NzkgNDAuMDc4OSAyMi41NzQ4QzM5Ljg1NTYgMjAuNDUxNyAzOC45NjM5IDE4LjQ1NDQgMzcuNTMyNCAxNi44NzA3Wk0yMi40OTc4IDM3Ljg4NDlDMjAuNzQ0MyAzNy44ODc0IDE5LjA0NTkgMzcuMjczMyAxNy42OTk0IDM2LjE1MDFDMTcuNzYwMSAzNi4xMTcgMTcuODY2NiAzNi4wNTg2IDE3LjkzNiAzNi4wMTYxTDI1LjkwMDQgMzEuNDE1NkMyNi4xMDAzIDMxLjMwMTkgMjYuMjY2MyAzMS4xMzcgMjYuMzgxMyAzMC45Mzc4QzI2LjQ5NjQgMzAuNzM4NiAyNi41NTYzIDMwLjUxMjQgMjYuNTU0OSAzMC4yODI1VjE5LjA1NDJMMjkuOTIxMyAyMC45OThDMjkuOTM4OSAyMS4wMDY4IDI5Ljk1NDEgMjEuMDE5OCAyOS45NjU2IDIxLjAzNTlDMjkuOTc3IDIxLjA1MiAyOS45ODQyIDIxLjA3MDcgMjkuOTg2NyAyMS4wOTAyVjMwLjM4ODlDMjkuOTg0MiAzMi4zNzUgMjkuMTk0NiAzNC4yNzkxIDI3Ljc5MDkgMzUuNjg0MUMyNi4zODcyIDM3LjA4OTIgMjQuNDgzOCAzNy44ODA2IDIyLjQ5NzggMzcuODg0OVpNNi4zOTIyNyAzMS4wMDY0QzUuNTEzOTcgMjkuNDg4OCA1LjE5NzQyIDI3LjcxMDcgNS40OTgwNCAyNS45ODMyQzUuNTU3MTggMjYuMDE4NyA1LjY2MDQ4IDI2LjA4MTggNS43MzQ2MSAyNi4xMjQ0TDEzLjY5OSAzMC43MjQ4QzEzLjg5NzUgMzAuODQwOCAxNC4xMjMzIDMwLjkwMiAxNC4zNTMyIDMwLjkwMkMxNC41ODMgMzAuOTAyIDE0LjgwODggMzAuODQwOCAxNS4wMDczIDMwLjcyNDhMMjQuNzMxIDI1LjExMDNWMjguOTk3OUMyNC43MzIxIDI5LjAxNzcgMjQuNzI4MyAyOS4wMzc2IDI0LjcxOTkgMjkuMDU1NkMyNC43MTE1IDI5LjA3MzYgMjQuNjk4OCAyOS4wODkzIDI0LjY4MjkgMjkuMTAxMkwxNi42MzE3IDMzLjc0OTdDMTQuOTA5NiAzNC43NDE2IDEyLjg2NDMgMzUuMDA5NyAxMC45NDQ3IDM0LjQ5NTRDOS4wMjUwNiAzMy45ODExIDcuMzg3ODUgMzIuNzI2MyA2LjM5MjI3IDMxLjAwNjRaTTQuMjk3MDcgMTMuNjE5NEM1LjE3MTU2IDEyLjA5OTggNi41NTI3OSAxMC45MzY0IDguMTk4ODUgMTAuMzMyN0M4LjE5ODg1IDEwLjQwMTMgOC4xOTQ5MSAxMC41MjI4IDguMTk0OTEgMTAuNjA3MVYxOS44MDhDOC4xOTM1MSAyMC4wMzc4IDguMjUzMzQgMjAuMjYzOCA4LjM2ODIzIDIwLjQ2MjlDOC40ODMxMiAyMC42NjE5IDguNjQ4OTMgMjAuODI2NyA4Ljg0ODYzIDIwLjk0MDRMMTguNTcyMyAyNi41NTQyTDE1LjIwNiAyOC40OTc5QzE1LjE4OTQgMjguNTA4OSAxNS4xNzAzIDI4LjUxNTUgMTUuMTUwNSAyOC41MTczQzE1LjEzMDcgMjguNTE5MSAxNS4xMTA3IDI4LjUxNiAxNS4wOTI0IDI4LjUwODJMNy4wNDA0NiAyMy44NTU3QzUuMzIxMzUgMjIuODYwMSA0LjA2NzE2IDIxLjIyMzUgMy41NTI4OSAxOS4zMDQ2QzMuMDM4NjIgMTcuMzg1OCAzLjMwNjI0IDE1LjM0MTMgNC4yOTcwNyAxMy42MTk0Wk0zMS45NTUgMjAuMDU1NkwyMi4yMzEyIDE0LjQ0MTFMMjUuNTk3NiAxMi40OTgxQzI1LjYxNDIgMTIuNDg3MiAyNS42MzMzIDEyLjQ4MDUgMjUuNjUzMSAxMi40Nzg3QzI1LjY3MjkgMTIuNDc2OSAyNS42OTI4IDEyLjQ4MDEgMjUuNzExMSAxMi40ODc5TDMzLjc2MzEgMTcuMTM2NEMzNC45OTY3IDE3Ljg0OSAzNi4wMDE3IDE4Ljg5ODIgMzYuNjYwNiAyMC4xNjEzQzM3LjMxOTQgMjEuNDI0NCAzNy42MDQ3IDIyLjg0OSAzNy40ODMyIDI0LjI2ODRDMzcuMzYxNyAyNS42ODc4IDM2LjgzODIgMjcuMDQzMiAzNS45NzQzIDI4LjE3NTlDMzUuMTEwMyAyOS4zMDg2IDMzLjk0MTUgMzAuMTcxNyAzMi42MDQ3IDMwLjY2NDFDMzIuNjA0NyAzMC41OTQ3IDMyLjYwNDcgMzAuNDczMyAzMi42MDQ3IDMwLjM4ODlWMjEuMTg4QzMyLjYwNjYgMjAuOTU4NiAzMi41NDc0IDIwLjczMjggMzIuNDMzMiAyMC41MzM4QzMyLjMxOSAyMC4zMzQ4IDMyLjE1NCAyMC4xNjk4IDMxLjk1NSAyMC4wNTU2Wk0zNS4zMDU1IDE1LjAxMjhDMzUuMjQ2NCAxNC45NzY1IDM1LjE0MzEgMTQuOTE0MiAzNS4wNjkgMTQuODcxN0wyNy4xMDQ1IDEwLjI3MTJDMjYuOTA2IDEwLjE1NTQgMjYuNjgwMyAxMC4wOTQzIDI2LjQ1MDQgMTAuMDk0M0MyNi4yMjA2IDEwLjA5NDMgMjUuOTk0OCAxMC4xNTU0IDI1Ljc5NjMgMTAuMjcxMkwxNi4wNzI2IDE1Ljg4NThWMTEuOTk4MkMxNi4wNzE1IDExLjk3ODMgMTYuMDc1MyAxMS45NTg1IDE2LjA4MzcgMTEuOTQwNUMxNi4wOTIxIDExLjkyMjUgMTYuMTA0OCAxMS45MDY4IDE2LjEyMDcgMTEuODk0OUwyNC4xNzE5IDcuMjUwMjVDMjUuNDA1MyA2LjUzOTAzIDI2LjgxNTggNi4xOTM3NiAyOC4yMzgzIDYuMjU0ODJDMjkuNjYwOCA2LjMxNTg5IDMxLjAzNjQgNi43ODA3NyAzMi4yMDQ0IDcuNTk1MDhDMzMuMzcyMyA4LjQwOTM5IDM0LjI4NDIgOS41Mzk0NSAzNC44MzM0IDEwLjg1MzFDMzUuMzgyNiAxMi4xNjY3IDM1LjU0NjQgMTMuNjA5NSAzNS4zMDU1IDE1LjAxMjhaTTE0LjI0MjQgMjEuOTQxOUwxMC44NzUyIDE5Ljk5ODFDMTAuODU3NiAxOS45ODkzIDEwLjg0MjMgMTkuOTc2MyAxMC44MzA5IDE5Ljk2MDJDMTAuODE5NSAxOS45NDQxIDEwLjgxMjIgMTkuOTI1NCAxMC44MDk4IDE5LjkwNThWMTAuNjA3MUMxMC44MTA3IDkuMTgyOTUgMTEuMjE3MyA3Ljc4ODQ4IDExLjk4MTkgNi41ODY5NkMxMi43NDY2IDUuMzg1NDQgMTMuODM3NyA0LjQyNjU5IDE1LjEyNzUgMy44MjI2NEMxNi40MTczIDMuMjE4NjkgMTcuODUyNCAyLjk5NDY0IDE5LjI2NDkgMy4xNzY3QzIwLjY3NzUgMy4zNTg3NiAyMi4wMDg5IDMuOTM5NDEgMjMuMTAzNCA0Ljg1MDY3QzIzLjA0MjcgNC44ODM3OSAyMi45MzcgNC45NDIxNSAyMi44NjY4IDQuOTg0NzNMMTQuOTAyNCA5LjU4NTE3QzE0LjcwMjUgOS42OTg3OCAxNC41MzY2IDkuODYzNTYgMTQuNDIxNSAxMC4wNjI2QzE0LjMwNjUgMTAuMjYxNiAxNC4yNDY2IDEwLjQ4NzcgMTQuMjQ3OSAxMC43MTc1TDE0LjI0MjQgMjEuOTQxOVpNMTYuMDcxIDE3Ljk5OTFMMjAuNDAxOCAxNS40OTc4TDI0LjczMjUgMTcuOTk3NVYyMi45OTg1TDIwLjQwMTggMjUuNDk4M0wxNi4wNzEgMjIuOTk4NVYxNy45OTkxWiIgZmlsbD0iY3VycmVudENvbG9yIj48L3BhdGg+PC9zdmc+
+// @homepage            https://scriptcat.org/script-show-page/1027
 // ==/UserScript==
 
 
@@ -72,17 +80,74 @@ var _w = unsafeWindow,
     Swal = Swal || window.Swal;
 
 // 多域名候选及自动测速选择
-// API 配置 — 使用自建 New-API
-var _host = "https://api.bashijiuhou.com";
-var _apiKey = "sk-1Pkx8xT2qbnjMVjGOa5RRNroihdd45g2FndkhoVfR4Vi9Rkv";
-var _defaultModel = "deepseek-default";
+var HOST_CANDIDATES = [
+    "https://911285.xyz",
+    "https://gptjs.808860.xyz"
+];
 
+// 读取缓存的域名与时间戳
+var _cachedHost = localStorage.getItem('GPTJsSetting.hostSelected');
+var _cachedAt = parseInt(localStorage.getItem('GPTJsSetting.hostSelectedAt') || '0');
+// 初始 _host：优先使用缓存，否则使用第一个候选
+var _host = _cachedHost || HOST_CANDIDATES[0];
 
+function requestAuth(host) {
+    return new Promise(function (resolve, reject) {
+        var startAt = Date.now();
+        var _u = getCk('_uid') || getCk('UID');
+        try {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: host + '/api/v1/auth?uid=' + _u + '&v=' + GM_info['script']['version'],
+                timeout: 5000,
+                onload: function (xhr) {
+                    if (xhr.status == 200) {
+                        resolve({ host: host, ms: Date.now() - startAt, response: xhr.responseText });
+                    } else {
+                        reject(new Error('status error'));
+                    }
+                },
+                onerror: function () { reject(new Error('error')); },
+                ontimeout: function () { reject(new Error('timeout')); }
+            });
+        } catch (e) {
+            reject(e);
+        }
+    });
+}
 
+function findFastest() {
+    return new Promise(function (resolve, reject) {
+        var hasResolved = false;
+        var errCount = 0;
+        HOST_CANDIDATES.forEach(function (h) {
+            requestAuth(h).then(function (res) {
+                if (!hasResolved) {
+                    hasResolved = true;
+                    _host = res.host;
+                    localStorage.setItem('GPTJsSetting.hostSelected', _host);
+                    localStorage.setItem('GPTJsSetting.hostSelectedAt', String(Date.now()));
+                    try { console.log('[GPTJs] 切换到更快域名:', _host, '延迟', res.ms + 'ms'); } catch (_) { /* empty */ }
+                    resolve(res);
+                }
+            }).catch(function () {
+                errCount++;
+                if (errCount == HOST_CANDIDATES.length && !hasResolved) reject();
+            });
+        });
+    });
+}
 
+function initFastestHost() {
+    var twoHours = 2 * 60 * 60 * 1000;
+    if (_cachedAt && (Date.now() - _cachedAt) < twoHours) {
+        return requestAuth(_host).catch(function () { return findFastest(); });
+    } else {
+        return findFastest();
+    }
+}
 
-
-
+var _authPromise = initFastestHost();
 
 var _mlist, _defaults, _domList, $subBtn, $saveBtn, $frame_c, $okBtn;
 var _currentQuestionMeta = null;
@@ -596,25 +661,54 @@ function showBox() {
                 <button class="ne21-btn ne21-btn-primary">充值</button>
             </a>
             <select id="modelSelect">
-                <option value="deepseek-default">DeepSeek V4 Flash (推荐)</option>
-                <option value="deepseek-expert">DeepSeek V4 Pro (高质量)</option>
-                <option value="deepseek-reasoner">DeepSeek R1 (深度思考)</option>
-                <option value="z-ai/glm-5.1">GLM-5.1</option>
+                <option value="GPT-3.5">GPT-4.1 (普通｜低价)</option>
+                <option value="ERNIE-Bot-4.0">GPT-5 (最新)</option>
+                <option value="GPT-4">DeepSeek-R1 (思考｜推荐)</option>
+                <option value="GPT-4-All">DeepSeek-R1 (联网｜高价)</option>
             </select>
             <button id="moreSettingsBtn" class="ne21-btn ne21-btn-secondary">设置</button>
         </div>
     `);
 
+    // 模型列表缓存：先从缓存加载避免闪烁
+    var CACHE_KEY_MODELS = 'GPTJsSetting.cachedModels';
+    var cachedModels = localStorage.getItem(CACHE_KEY_MODELS);
+    if (cachedModels) {
+        $('#modelSelect').html(cachedModels);
+    }
     // 同步恢复上次选中的模型，避免等 window.onload 造成的闪烁
-    var lastSelectedModel = localStorage.getItem('GPTJsSetting.model') || _defaultModel;
-    $('#modelSelect').val(lastSelectedModel);
+    var lastSelectedModel = localStorage.getItem('GPTJsSetting.model');
+    if (lastSelectedModel) {
+        $('#modelSelect').val(lastSelectedModel);
+    }
     // 同步绑定 change 监听（命名空间避免 showBox 重入时重复绑定）
     $('#modelSelect').off('change.gptjsModel').on('change.gptjsModel', function () {
         localStorage.setItem('GPTJsSetting.model', $(this).val());
     });
 
     //公告&积分
-    
+    if (_authPromise) {
+        _authPromise.then(function (res) {
+            var obj = {};
+            try { obj = $.parseJSON(res.response) || {}; } catch (e) { /* empty */ }
+            var data = obj.data || {};
+            var notice = data.notice || '';
+            var score = (data.score !== undefined && data.score !== null) ? data.score : '-';
+            $('#userInfo').html(notice + "积分余额:" + score);
+            // 模型列表：只有内容变化时才更新DOM和缓存，避免闪烁
+            if (data.models && data.models !== cachedModels) {
+                localStorage.setItem(CACHE_KEY_MODELS, data.models);
+                // 优先使用 localStorage 中保存的模型；否则保留当前 <select> 值
+                var selectedValue = localStorage.getItem('GPTJsSetting.model') || $('#modelSelect').val();
+                $('#modelSelect').html(data.models);
+                if (selectedValue) {
+                    $('#modelSelect').val(selectedValue);
+                }
+            }
+        }).catch(function () {
+            $('#userInfo').html("欢迎使用，获取服务器公告超时！");
+        });
+    }
 }
 
 var _ne21LogColorMap = {
@@ -3513,20 +3607,6 @@ function buildPrompt(opts) {
     return { payload: payload, display: display }
 }
 
-// AIç­æ¡åå¤çï¼å»é¤å¼å¯¼è¯­ãåºå·ãæ ç¹åç¼ç­
-function cleanupAiAnswer(questionType, answerText, questionText) {
-    let answer = String(answerText || '').trim();
-    answer = answer.replace(/^```[\w-]*\s*/, '').replace(/```$/, '').trim();
-    answer = answer.replace(/^[A-Zï¼¡-ï¼º]\s*[\.ï¼ã:ï¼]?\s*/i, '').trim();
-    answer = answer.replace(/^(ç­æ¡|åç­|ç­|ç»æ)\s*[ï¼:]\s*/i, '').trim();
-    if (String(questionType) === '4') {
-        answer = answer.replace(/^ç¬¬[ä¸äºä¸åäºå­ä¸å«ä¹åç¾åä¸0-9]+ä¸ªé®é¢\s*[ï¼:]\s*/i, '')
-            .replace(/^(å°±æ¯|å³|å æ­¤|æä»¥|æ|åºä¸º|åºè¯¥æ¯)\s*/i, '')
-            .replace(/[ãï¼]+$/g, '').trim();
-    }
-    return answer;
-}
-
 function getAnswer(_t, _q, retryCount = 0) {
     // 兼容: _q 既可为字符串(旧调用),也可为 buildPrompt() 返回的 { payload, display } 对象
     let _payload, _display
@@ -3545,134 +3625,118 @@ function getAnswer(_t, _q, retryCount = 0) {
         _qPrefix += '题 [' + (_m.typeName || '未知') + '] '
     }
     logger(_qPrefix + '题目:' + _display, 'pink')
+    // 在日志中插入一条 "AI 思考中..." 占位行, 拿到响应后原地替换为答案/错误, 避免独立提示框反复出现/消失
     let _thinkingHtml = '<span class="ne21-log-spinner"></span>AI 思考中<span class="ne21-log-dots"><i></i><i></i><i></i></span>' + (retryCount > 0 ? '（第' + (retryCount + 1) + '次）' : '')
     let $thinkingLog = logger(_thinkingHtml, 'gray')
     return new Promise((resolve, reject) => {
-        let requestCompleted = false;
-        let longWaitTimer = null;
+        let _u = getCk('_uid') || getCk('UID')
+        let requestCompleted = false;  // 标记请求是否已完成
+        let longWaitTimer = null;  // 长时间等待定时器
 
-        // 按用户设置的搜题间隔节流
+        // 按用户设置的搜题间隔节流：计算本次需要等待的 ms，并预订下一次可发起时间
         let _intervalSec = parseInt(localStorage.getItem('GPTJsSetting.reqIntervalTime'), 10)
         if (!isFinite(_intervalSec) || _intervalSec < 0) _intervalSec = (setting && setting.reqIntervalTime) || 0
         let _intervalMs = Math.min(60000, _intervalSec * 1000)
         let _nowTs = Date.now()
         let _waitMs = Math.max(0, _ne21NextAiAllowedAt - _nowTs)
+        // 预订下一次最早可发起时刻：当前/解锁时间 + 间隔
         _ne21NextAiAllowedAt = Math.max(_nowTs, _ne21NextAiAllowedAt) + _intervalMs
         if (_waitMs > 0) {
             updateLogEntry($thinkingLog, '搜题间隔限制，等待 ' + Math.round(_waitMs / 1000) + 's 后发起请求...', 'gray')
         }
 
+        // 设置5分钟的监控定时器（覆盖 throttle 等待时间）
         longWaitTimer = setTimeout(() => {
             if (!requestCompleted) {
-                requestCompleted = true;
+                requestCompleted = true;  // 标记为已完成，避免处理旧响应
+                // 原地把 "AI 思考中" 行替换为重试提示, 不再追加新日志
                 updateLogEntry($thinkingLog, '请求超过5分钟未响应，正在重新发起请求...（第' + (retryCount + 1) + '次重试）', 'orange')
-                if (retryCount < 3) {
-                    getAnswer(_t, _q, retryCount + 1).then(resolve).catch(reject)
-                } else {
-                    logger('重试次数已用尽，跳过此题', 'red')
-                    reject({ 'c': 0 })
-                }
+                // 重新发起请求(递归调用会创建新的 "思考中" 行)
+                getAnswer(_t, _q, retryCount + 1).then(resolve).catch(reject)
             }
-        }, 300000 + _waitMs);
+        }, 300000 + _waitMs);  // 5分钟 = 300000毫秒
 
         setTimeout(function () {
-        if (requestCompleted) return;
+        if (requestCompleted) return; // 若已因 5 分钟超时进入重试，则不再发送本次请求
 
+        // 请求实际发起前，若节流等待行还在显示，更新为"思考中"
         if (_waitMs > 0) {
             let _resumeHtml = '<span class="ne21-log-spinner"></span>AI 思考中<span class="ne21-log-dots"><i></i><i></i><i></i></span>' + (retryCount > 0 ? '（第' + (retryCount + 1) + '次）' : '')
             updateLogEntry($thinkingLog, _resumeHtml, 'gray')
         }
 
-        let _model = localStorage.getItem('GPTJsSetting.model') || _defaultModel;
-        let questionTypeLabels = { '0': '单选题', '1': '多选题', '2': '填空题', '3': '判断题', '4': '简答题' };
-        let questionTypeLabel = questionTypeLabels[String(_t)] || '未知题型';
-
-        let systemPrompt = '你是一个学习通作业考试助手。请严格按照以下规则回答：\n' +
-            '1. 单选题：只回答选项的文本内容（不含A/B/C/D字母），不要解释\n' +
-            '2. 多选题：用"#"分割多个答案，每个答案只写选项文本内容\n' +
-            '3. 填空题：用"|"分割多个空的答案\n' +
-            '4. 判断题：只回答"正确"或"错误"\n' +
-            '5. 简答题：只输出可直接填入答题框的最终答案，不超过50字\n' +
-            '6. 只输出答案本身，不要有任何前缀、解释或多余内容';
-
-        let userPrompt = '题型：' + questionTypeLabel + '\n' + _payload;
-        if (String(_t) === '4') {
-            userPrompt += '\n请直接给出可填写的最终答案，不要使用序号、冒号、引导句或解释。';
-        }
-
         GM_xmlhttpRequest({
             method: 'POST',
-            url: _host + '/v1/chat/completions',
+            url: _host + '/api/v1/cx?v=' + GM_info['script']['version'],
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + _apiKey
+                'Content-type': 'application/x-www-form-urlencoded',
+                'Authorization': ''
             },
-            data: JSON.stringify({
-                model: _model,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userPrompt }
-                ],
-                temperature: 0.3,
-                max_tokens: 1024
-            }),
+            data: 'question=' + encodeURIComponent(_payload) + '&u=' + _u + '&model=' + (localStorage.getItem('GPTJsSetting.model') || $('#modelSelect').val() || 'GPT-3.5'),
             timeout: 120000,
             onload: function (xhr) {
+                // 如果请求已经被标记为完成（超时重试了），则忽略此响应
                 if (requestCompleted) {
                     logger('收到已超时请求的响应，已忽略', 'gray')
                     return;
                 }
 
                 requestCompleted = true;
-                clearTimeout(longWaitTimer);
-
-                try {
-                    var obj = $.parseJSON(xhr.responseText);
-                } catch (e) {
-                    updateLogEntry($thinkingLog, '响应解析失败: ' + xhr.responseText.substring(0, 200), 'red')
-                    reject({ 'c': 0 })
-                    return;
-                }
+                clearTimeout(longWaitTimer);  // 清除监控定时器
+                // 请求完成 — 不再需要 hideThinking, 后面会通过 updateLogEntry 原地替换日志行
 
                 if (xhr.status == 200) {
-                    try {
-                        var _answer = obj.choices[0].message.content.trim();
-                        _answer = cleanupAiAnswer(_t, _answer, _payload);
-                        if (_answer) {
-                            updateLogEntry($thinkingLog, "答案:" + _answer, 'purple')
-                            resolve(_answer)
-                        } else {
-                            updateLogEntry($thinkingLog, 'AI返回空答案', 'red')
-                            localStorage.setItem('GPTJsSetting.sub', false)
-                            reject({ 'c': 0 })
-                        }
-                    } catch (e) {
-                        updateLogEntry($thinkingLog, '解析AI回复失败: ' + JSON.stringify(obj).substring(0, 200), 'red')
+                    let obj = $.parseJSON(xhr.responseText) || {};
+                    //正则表达式去掉句子最后一个句号
+                    let _answer = obj.data.answer.replace(/。$/, '');
+                    // _answer = obj.data.answer
+                    // logger(_answer)
+                    if (obj.code == 200 && _answer) {
+                        updateLogEntry($thinkingLog, "答案:" + _answer, 'purple')
+                        resolve(_answer.replace(/^[A-Z]\s*\n\s*/, '').trim())
+                    } else if (obj.msg && _answer != '') {
+                        updateLogEntry($thinkingLog, obj.msg, 'red')
+                        // setting.sub = 0
+                        localStorage.setItem('GPTJsSetting.sub', false)
+                        reject({ 'c': 0 })
+                    } else {
+                        updateLogEntry($thinkingLog, '暂无答案', 'red')
+                        // setting.sub = 0
+                        localStorage.setItem('GPTJsSetting.sub', false)
                         reject({ 'c': 0 })
                     }
-                } else if (xhr.status == 401) {
-                    updateLogEntry($thinkingLog, 'API认证失败，请检查API Key配置', 'red')
-                    reject({ 'c': 401 })
-                } else if (xhr.status == 429) {
-                    updateLogEntry($thinkingLog, '请求过于频繁，请稍后再试', 'red')
-                    reject({ 'c': 429 })
-                } else if (xhr.status == 500) {
-                    updateLogEntry($thinkingLog, 'AI服务器压力过大，请先保存答案后刷新重试', 'red')
-                    reject({ 'c': 500 })
                 } else if (xhr.status == 403) {
-                    updateLogEntry($thinkingLog, '请求被拒绝(403)，可能是余额不足', 'red')
+                    updateLogEntry($thinkingLog, '请求过于频繁，请稍后再试', 'red')
                     reject({ 'c': 403 })
+                } else if (xhr.status == 500) {
+                    updateLogEntry($thinkingLog, 'ChatGPT官方服务器压力过大,请先保存答案后刷新重试', 'red')
+                    reject({ 'c': 500 })
+                } else if (xhr.status == 444) {
+                    updateLogEntry($thinkingLog, 'IP异常，已被拉入服务器黑名单，请过几个小时再试', 'red')
+                    reject({ 'c': 444 })
+                } else if (xhr.status == 400) {
+                    let obj = $.parseJSON(xhr.responseText) || {};
+                    updateLogEntry($thinkingLog, obj.msg, 'red')
+                    reject({ 'c': 400 })
+                } else if (xhr.status == 222) {
+                    let obj = $.parseJSON(xhr.responseText) || {};
+                    updateLogEntry($thinkingLog, "账户余额不足!", 'red')
+                    reject({ 'c': 222 })
                 } else {
-                    var errMsg = obj.error ? obj.error.message : '未知错误';
-                    updateLogEntry($thinkingLog, '请求异常(' + xhr.status + '): ' + errMsg, 'red')
-                    reject({ 'c': xhr.status })
+                    updateLogEntry($thinkingLog, '请求异常...,请先保存答案后刷新重试', 'red')
+                    reject({ 'c': 555 })
                 }
             },
             ontimeout: function () {
-                if (requestCompleted) return;
+                // 如果请求已经被标记为完成（超时重试了），则忽略此超时
+                if (requestCompleted) {
+                    return;
+                }
+
                 requestCompleted = true;
-                clearTimeout(longWaitTimer);
-                updateLogEntry($thinkingLog, '请求超时(120s)', 'red')
+                clearTimeout(longWaitTimer);  // 清除监控定时器
+                // 请求超时 — 不再调用 hideThinking, 直接原地更新日志行
+                updateLogEntry($thinkingLog, '请求异常...,请先保存答案后刷新重试', 'red')
                 reject({ 'c': 666 })
             }
         });
