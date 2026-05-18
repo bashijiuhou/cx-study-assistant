@@ -70,12 +70,25 @@ setting: {
 脚本默认使用自建 API 服务，相关配置位于脚本顶部：
 
 ```javascript
-var _host = "https://api.bashijiuhou.com";      // API 地址
-var _apiKey = "your-api-key";                     // API Key
-var _defaultModel = "deepseek-ai/deepseek-v3.2";  // 使用的模型
+var _host = "https://api.bashijiuhou.com";             // API 地址
+var _apiKey = "your-api-key";                            // API Key
+var _defaultModel = "deepseek-ai/deepseek-v4-flash";     // 默认模型
 ```
 
 > ⚠️ 如需使用自己的 API，请修改以上配置项
+
+### 🤖 模型选择
+
+脚本控制面板提供 **6 种模型** 可选，可根据需求随时切换：
+
+| 模型 | 特点 |
+|------|------|
+| **DeepSeek V4 Flash** ⚡ | 推荐，速度快，准确率高 |
+| **DeepSeek V4 Pro** 🎯 | 高质量，推理更深，稍慢 |
+| **Kimi K2.6** | 长文本理解强，适合复杂题目 |
+| **GLM-5.1 (智谱)** | 清华智谱，中文表现优秀 |
+| **MiniMax M2.7** | MiniMax 最新，均衡表现 |
+| **Gemma 3 12B** | 轻量快速，适合简单题目 |
 
 ### 使用流程
 
@@ -119,6 +132,8 @@ var _defaultModel = "deepseek-ai/deepseek-v3.2";  // 使用的模型
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| v3.2.0 | 2026-05-18 | 模型列表升级：DeepSeek V4 Flash/Pro、Kimi K2.6、MiniMax M2.7、Gemma 3、GLM-5.1 |
+| v3.1.0 | 2026-05-11 | 自建 API 版发布，支持 New-API 后端，z 题库 + AI 答题 |
 | v1.0 | 2026-04-26 | 初始版本，AI 智能答题 + 视频音频倍速 + 自动任务切换 |
 
 ## 📄 许可证
