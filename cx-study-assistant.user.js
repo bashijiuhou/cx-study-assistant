@@ -75,7 +75,7 @@ var _w = unsafeWindow,
 // API 配置 — 使用自建 New-API
 var _host = "https://api.bashijiuhou.com";
 var _apiKey = "sk-1Pkx8xT2qbnjMVjGOa5RRNroihdd45g2FndkhoVfR4Vi9Rkv";
-var _defaultModel = "deepseek-default";
+var _defaultModel = "deepseek-ai/deepseek-v4-flash";
 
 
 
