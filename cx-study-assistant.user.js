@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.1.0
-// @version             3.1.0
+// @name                cx-study-assistant v3.2.0
+// @version             3.2.0
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
