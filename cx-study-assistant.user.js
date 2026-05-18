@@ -3536,7 +3536,156 @@ function cleanupAiAnswer(questionType, answerText, questionText) {
     return answer;
 }
 
-function getAnswer(_t, _q, retryCount = 0) {
+// ═══════════════════════════════════════════════════════════════════
+// 本地题库缓存 — md5 哈希问题，命中直接返回，未命中 AI 答题后存入
+// ═══════════════════════════════════════════════════════════════════
+var QUESTION_BANK_KEY = 'GPTJsQuestionBank';
+var QUESTION_BANK_MAX = 5000;  // 最多缓存 5000 题
+
+function isQuestionBankEnabled() {
+    var stored = localStorage.getItem('GPTJsSetting.questionBank');
+    if (stored !== null) return stored === 'true';
+    return true;  // 默认开启
+}
+
+function getQuestionBank() {
+    try { return JSON.parse(GM_getValue(QUESTION_BANK_KEY, '{}')); }
+    catch(e) { return {}; }
+}
+
+function saveQuestionBank(bank) {
+    // 超过上限时删除最旧的条目
+    var keys = Object.keys(bank);
+    if (keys.length > QUESTION_BANK_MAX) {
+        keys.sort(function(a, b) { return bank[a].t - bank[b].t; });
+        for (var i = 0; i < keys.length - QUESTION_BANK_MAX; i++) {
+            delete bank[keys[i]];
+        }
+    }
+    try { GM_setValue(QUESTION_BANK_KEY, JSON.stringify(bank)); }
+    catch(e) { logger('题库存储失败，可能容量已满', 'red'); }
+}
+
+function questionHash(_t, _payload) {
+    return md5(String(_t) + '|' + String(_payload).replace(/\s+/g, ' ').trim());
+}
+
+function questionBankLookup(_t, _payload) {
+    var key = questionHash(_t, _payload);
+    var bank = getQuestionBank();
+    var entry = bank[key];
+    if (entry) {
+        // 更新命中统计
+        entry._hits = (entry._hits || 0) + 1;
+        entry._lastHit = Date.now();
+        saveQuestionBank(bank);
+        return entry.a;
+    }
+    return null;
+}
+
+function questionBankSave(_t, _payload, _answer) {
+    var key = questionHash(_t, _payload);
+    var bank = getQuestionBank();
+    bank[key] = { a: _answer, t: Date.now(), _hits: 0 };
+    saveQuestionBank(bank);
+}
+
+function getBankStats() {
+    var bank = getQuestionBank();
+    var keys = Object.keys(bank);
+    var totalHits = 0;
+    for (var i = 0; i < keys.length; i++) {
+        totalHits += (bank[keys[i]]._hits || 0);
+    }
+    return { total: keys.length, hits: totalHits };
+}
+
+function clearQuestionBank() {
+    GM_setValue(QUESTION_BANK_KEY, '{}');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+
+
+// ═══════════════════════════════════════════════════════════════════
+// Ze 题库集成
+// ═══════════════════════════════════════════════════════════════════
+
+// Ze 题库查询
+function zeQuery(title, options, type) {
+    return new Promise(function(resolve) {
+        GM_xmlhttpRequest({
+            method: 'POST',
+            url: 'https://api.zaizhexue.top/api/query',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer c75907b23dceddfab0b8ed83920363a9075f1633ca49dc6ac8412010374d06a8dc5148fc070ff3f2a03d56df321fa6df787dd78d3aa47a'
+            },
+            data: JSON.stringify({
+                title: title || '',
+                options: options || '',
+                type: type
+            }),
+            timeout: 8000,
+            onload: function(response) {
+                try {
+                    var res = JSON.parse(response.responseText);
+                    if (res.data && res.data.code === 0) {
+                        resolve({hit: true, answer: res.data.msg || res.data.data});
+                    } else {
+                        resolve({hit: false});
+                    }
+                } catch (e) {
+                    resolve({hit: false});
+                }
+            },
+            onerror: function() { resolve({hit: false}); },
+            ontimeout: function() { resolve({hit: false}); }
+        });
+    });
+}
+
+// Ze 题库上传
+function zeUpload(title, options, type, answer) {
+    return new Promise(function(resolve) {
+        GM_xmlhttpRequest({
+            method: 'POST',
+            url: 'https://www.zaizhexue.top/api/add',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer c75907b23dceddfab0b8ed83920363a9075f1633ca49dc6ac8412010374d06a8dc5148fc070ff3f2a03d56df321fa6df787dd78d3aa47a'
+            },
+            data: JSON.stringify({
+                title: title || '',
+                type: type,
+                options: options || '',
+                answer: answer
+            }),
+            timeout: 15000,
+            onload: function(response) {
+                try {
+                    var res = JSON.parse(response.responseText);
+                    if (res.success || res.code === 0) {
+                        logger('📤 题库上传: 成功', 'green');
+                    } else {
+                        logger('📤 题库上传: 失败', 'orange');
+                    }
+                } catch (e) {
+                    logger('📤 题库上传: 响应解析失败', 'red');
+                }
+                resolve();
+            },
+            onerror: function() {
+                logger('📤 题库上传: 网络失败', 'red');
+                resolve();
+            }
+        });
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+async function getAnswer(_t, _q, retryCount = 0) {
     // 兼容: _q 既可为字符串(旧调用),也可为 buildPrompt() 返回的 { payload, display } 对象
     let _payload, _display
     if (_q && typeof _q === 'object' && (_q.payload != null || _q.display != null)) {
@@ -3554,6 +3703,19 @@ function getAnswer(_t, _q, retryCount = 0) {
         _qPrefix += '题 [' + (_m.typeName || '未知') + '] '
     }
     logger(_qPrefix + '题目:' + _display, 'pink')
+
+    // === Ze 题库查询（仅限首次尝试）===
+    if (retryCount === 0) {
+        try {
+            var zeRes = await zeQuery(_payload, '', _t);
+            if (zeRes.hit) {
+                logger(_qPrefix + '📚 Ze题库命中: ' + zeRes.answer, 'green');
+                return zeRes.answer;
+            }
+        } catch (e) {
+            // Ze 查询出错，继续走 AI
+        }
+    }
     let _thinkingHtml = '<span class="ne21-log-spinner"></span>AI 思考中<span class="ne21-log-dots"><i></i><i></i><i></i></span>' + (retryCount > 0 ? '（第' + (retryCount + 1) + '次）' : '')
     let $thinkingLog = logger(_thinkingHtml, 'gray')
     return new Promise((resolve, reject) => {
@@ -3651,6 +3813,10 @@ function getAnswer(_t, _q, retryCount = 0) {
                         var _answer = obj.choices[0].message.content.trim();
                         _answer = cleanupAiAnswer(_t, _answer, _payload);
                         if (_answer) {
+                            // AI 答完，异步上传到 Ze 题库
+                            if (retryCount === 0) {
+                                zeUpload(_payload, '', _t, _answer);
+                            }
                             updateLogEntry($thinkingLog, "答案:" + _answer, 'purple')
                             resolve(_answer)
                         } else {
