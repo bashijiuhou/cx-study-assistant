@@ -596,17 +596,26 @@ function showBox() {
                 <button class="ne21-btn ne21-btn-primary">充值</button>
             </a>
             <select id="modelSelect">
-                <option value="deepseek-default">DeepSeek V4 Flash (推荐)</option>
-                <option value="deepseek-expert">DeepSeek V4 Pro (高质量)</option>
-                <option value="deepseek-reasoner">DeepSeek R1 (深度思考)</option>
-                <option value="z-ai/glm-5.1">GLM-5.1</option>
+                <option value="deepseek-ai/deepseek-v4-flash">DeepSeek V4 Flash (推荐 ⚡)</option>
+                <option value="deepseek-ai/deepseek-v4-pro">DeepSeek V4 Pro (高质量 🎯)</option>
+                <option value="moonshotai/kimi-k2.6">Kimi K2.6 (长文本)</option>
+                <option value="z-ai/glm-5.1">GLM-5.1 (智谱)</option>
+                <option value="minimaxai/minimax-m2.7">MiniMax M2.7</option>
+                <option value="google/gemma-3-12b-it">Gemma 3 12B (轻量)</option>
             </select>
             <button id="moreSettingsBtn" class="ne21-btn ne21-btn-secondary">设置</button>
         </div>
     `);
 
     // 同步恢复上次选中的模型，避免等 window.onload 造成的闪烁
+    // 旧模型名映射（向后兼容）
+    var _modelCompat = {
+        'deepseek-default': 'deepseek-ai/deepseek-v4-flash',
+        'deepseek-expert': 'deepseek-ai/deepseek-v4-pro',
+        'deepseek-reasoner': 'moonshotai/kimi-k2.6'
+    };
     var lastSelectedModel = localStorage.getItem('GPTJsSetting.model') || _defaultModel;
+    lastSelectedModel = _modelCompat[lastSelectedModel] || lastSelectedModel;
     $('#modelSelect').val(lastSelectedModel);
     // 同步绑定 change 监听（命名空间避免 showBox 重入时重复绑定）
     $('#modelSelect').off('change.gptjsModel').on('change.gptjsModel', function () {
@@ -3583,7 +3592,10 @@ function getAnswer(_t, _q, retryCount = 0) {
             updateLogEntry($thinkingLog, _resumeHtml, 'gray')
         }
 
+        // 旧模型名映射（向后兼容）
+        var _modelCompat = { 'deepseek-default': 'deepseek-ai/deepseek-v4-flash', 'deepseek-expert': 'deepseek-ai/deepseek-v4-pro', 'deepseek-reasoner': 'moonshotai/kimi-k2.6' };
         let _model = localStorage.getItem('GPTJsSetting.model') || _defaultModel;
+        _model = _modelCompat[_model] || _model;
         let questionTypeLabels = { '0': '单选题', '1': '多选题', '2': '填空题', '3': '判断题', '4': '简答题' };
         let questionTypeLabel = questionTypeLabels[String(_t)] || '未知题型';
 
