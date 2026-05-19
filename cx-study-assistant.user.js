@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.5-qb
-// @version             3.2.5
+// @name                cx-study-assistant v3.2.6-qb
+// @version             3.2.6
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -8,6 +8,9 @@
 // @connect api.bashijiuhou.com
 // @connect api.zaizhexue.top
 // @connect zaizhexue.top
+// @connect app.zaizhexue.top
+// @connect campuses.zerror.cc
+// @connect tiku.zerror.cc
 // @run-at              document-end
 // @grant               unsafeWindow
 // @grant               GM_xmlhttpRequest
@@ -3680,34 +3683,57 @@ function zeQuery(title, options, type) {
     });
 }
 
-// Ze 题库上传
+// ZError 题库上传（学习上传脚本逻辑）
+function zeTypeToZErrorType(type) {
+    var m = {
+        '0': 'single_choice',
+        '1': 'multiple_choice',
+        '2': 'fill_blank',
+        '3': 'true_false',
+        '4': 'short_answer'
+    };
+    return m[String(type)] || 'single_choice';
+}
 function zeUpload(title, options, type, answer) {
+    var token = '';
+    try { token = GM_getValue('zaizhexue_token', '') || ''; } catch (e) {}
+    var courseId = localStorage.getItem('GPTJsSetting.zerrorCourseId') || '';
+    var folderId = localStorage.getItem('GPTJsSetting.zerrorFolderId') || '';
+    if (!token) {
+        logger('📤 题库上传: 未登录ZError/在这学，缺少 zaizhexue_token', 'orange');
+        return Promise.resolve();
+    }
+    if (!courseId || !folderId) {
+        logger('📤 题库上传: 未配置 zerrorCourseId/zerrorFolderId', 'orange');
+        return Promise.resolve();
+    }
+    var optionArr = [];
+    if (Array.isArray(options)) optionArr = options;
+    else if (typeof options === 'string' && options.trim()) optionArr = options.split('|').map(function (x) { return x.trim(); }).filter(Boolean);
+    var payload = {
+        type: zeTypeToZErrorType(type),
+        content: title || '',
+        answer: answer || '',
+        options: JSON.stringify(optionArr),
+        add_to_top: false,
+        question_bank_id: parseInt(folderId)
+    };
     logger('📤 题库上传: 开始', 'gray');
     return new Promise(function(resolve) {
         GM_xmlhttpRequest({
             method: 'POST',
-            url: 'https://api.zaizhexue.top/api/add',
+            url: 'https://campuses.zerror.cc/courses/' + encodeURIComponent(courseId) + '/questions',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': 'Bearer c75907b23dceddfab0b8ed83920363a9075f1633ca49dc6ac8412010374d06a8dc5148fc070ff3f2a03d56df321fa6df787dd78d3aa47a'
+                'Authorization': token
             },
-            data: JSON.stringify({
-                title: title || '',
-                type: type,
-                options: options || '',
-                answer: answer
-            }),
+            data: JSON.stringify(payload),
             timeout: 15000,
             onload: function(response) {
-                try {
-                    var res = JSON.parse(response.responseText);
-                    if (res.success || res.code === 0 || (res.data && res.data.code === 0)) {
-                        logger('📤 题库上传: 成功', 'green');
-                    } else {
-                        logger('📤 题库上传: 失败 HTTP ' + response.status + ' ' + (res.message || res.msg || JSON.stringify(res).substring(0, 80)), 'orange');
-                    }
-                } catch (e) {
-                    logger('📤 题库上传: 响应解析失败 HTTP ' + response.status + ' ' + String(response.responseText).substring(0, 120), 'red');
+                if (response.status >= 200 && response.status < 300) {
+                    logger('📤 题库上传: 成功', 'green');
+                } else {
+                    logger('📤 题库上传: 失败 HTTP ' + response.status + ' ' + String(response.responseText || '').substring(0, 120), 'orange');
                 }
                 resolve();
             },
@@ -3876,8 +3902,10 @@ async function getAnswer(_t, _q, retryCount = 0) {
                         var _answer = obj.choices[0].message.content.trim();
                         _answer = cleanupAiAnswer(_t, _answer, _payload);
                         if (_answer) {
-                            // AI 答完后暂不上传到 Ze 题库：当前 ZE 查询接口可用，但 /api/add 返回 404/567，并非有效上传接口。
-                            // 如后续确认正确上传端点，再恢复 zeUpload(zePayload.title, zePayload.options, zePayload.type, _answer);
+                            // AI 答完，异步上传到 ZError 题库
+                            if (retryCount === 0) {
+                                zeUpload(zePayload.title, zePayload.options, zePayload.type, _answer);
+                            }
                             updateLogEntry($thinkingLog, "答案:" + _answer, 'purple')
                             resolve(_answer)
                         } else {
