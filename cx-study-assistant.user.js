@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.6-qb
-// @version             3.2.6
+// @name                cx-study-assistant v3.2.7-qb
+// @version             3.2.7
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -385,6 +385,13 @@ function showBox() {
             #ne-21box .ne21-btn-secondary{color:rgba(15,23,42,.78);background:rgba(255,255,255,.45);box-shadow:0 0 0 1px rgba(15,23,42,.06),inset 0 1px 0 rgba(255,255,255,.75),0 1px 2px rgba(15,23,42,.06);}
             #ne-21box .ne21-btn-secondary:hover{background:rgba(255,255,255,.65);color:rgba(15,23,42,.92);box-shadow:0 0 0 1px rgba(15,23,42,.08),inset 0 1px 0 rgba(255,255,255,.85),0 2px 4px rgba(15,23,42,.08);}
             #ne-21box .ne21-btn:active{transform:translateY(0) scale(.98);}
+            #ne-21box .ne21-btn-small{padding:5px 10px;font-size:11px;border-radius:11px;}
+            #ne-21box .ne21-input{box-sizing:border-box;width:100%;padding:6px 9px;font-size:12px;border-radius:10px;border:1px solid rgba(255,255,255,.65);background:rgba(255,255,255,.5);color:rgba(15,23,42,.86);outline:none;box-shadow:0 0 0 1px rgba(15,23,42,.05),inset 0 1px 0 rgba(255,255,255,.75);}
+            #ne-21box .ne21-input:focus{background:rgba(255,255,255,.72);box-shadow:0 0 0 1px rgba(15,23,42,.08),inset 0 1px 0 rgba(255,255,255,.82),0 0 0 3px rgba(15,23,42,.06);}
+            #ne-21box .ne21-mini-row{display:flex;gap:6px;align-items:center;margin:6px 0;}
+            #ne-21box .ne21-mini-row .ne21-input{flex:1;min-width:0;}
+            #ne-21box .ne21-setting-tip{display:block;font-size:11px;color:rgba(15,23,42,.48);line-height:1.5;margin:4px 0 8px;}
+            #ne-21box .ne21-code-box{font-family:"SF Mono",Consolas,monospace;font-size:18px;letter-spacing:2px;text-align:center;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.55);border:1px solid rgba(255,255,255,.7);box-shadow:0 0 0 1px rgba(15,23,42,.05);user-select:all;cursor:pointer;}
             #ne-21box #modelSelect{flex:1;min-width:0;padding:7px 10px;font-size:12px;border-radius:14px;border:1px solid rgba(255,255,255,.7);background:rgba(255,255,255,.55);color:rgba(15,23,42,.86);cursor:pointer;outline:none;box-shadow:0 0 0 1px rgba(15,23,42,.06),inset 0 1px 0 rgba(255,255,255,.8);transition:background .2s,box-shadow .2s;}
             #ne-21box #modelSelect:hover{background:rgba(255,255,255,.7);}
             #ne-21box #modelSelect:focus{background:rgba(255,255,255,.75);box-shadow:0 0 0 1px rgba(15,23,42,.08),inset 0 1px 0 rgba(255,255,255,.85),0 0 0 4px rgba(15,23,42,.1);}
@@ -436,6 +443,19 @@ function showBox() {
                         <label><select id="GPTJsSetting.rate" class="ne21-select"><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>视频/音频倍速</label>
                         <label title="两次 AI 搜题请求之间的最小间隔（秒）。0 为不节流；高并发整卷预览、小号被限流时可设 1~3">
                             <input type="number" id="GPTJsSetting.reqIntervalTime" class="ne21-select" min="0" max="60" step="1" style="min-width:56px;width:56px;padding:5px 8px;">搜题间隔 (秒)
+                        </label>
+                        <p></p>
+                        <label style="display:block;">
+                            <span style="display:block;margin-bottom:6px;color:rgba(15,23,42,.78);">ZError/在这学题库上传</span>
+                            <span class="ne21-setting-tip">先点“获取验证码”，去 ZError 登录公众号发送验证码；成功后会自动保存 token。</span>
+                            <div class="ne21-mini-row">
+                                <button type="button" id="zerrorLoginBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">获取验证码</button>
+                                <button type="button" id="zerrorCheckLoginBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">检查登录</button>
+                                <button type="button" id="zerrorLogoutBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">清除</button>
+                            </div>
+                            <div id="zerrorLoginCodeBox" class="ne21-code-box" style="display:none;" title="点击复制验证码"></div>
+                            <div class="ne21-mini-row"><input id="GPTJsSetting.zerrorCourseId" class="ne21-input" placeholder="courseId"><input id="GPTJsSetting.zerrorFolderId" class="ne21-input" placeholder="folderId"></div>
+                            <span id="zerrorLoginStatus" class="ne21-setting-tip"></span>
                         </label>
                         <p></p>
                         <label><input type="checkbox" id="GPTJsSetting.sub">测验自动提交</label>
@@ -591,6 +611,8 @@ function showBox() {
                     localStorage.setItem('GPTJsSetting.reqIntervalTime', String(v));
                 });
             }
+
+            initZErrorLoginUI();
         })();
     } else {
         $('#ne-21log', window.parent.document).html('')
@@ -3640,6 +3662,179 @@ function clearQuestionBank() {
 // ═══════════════════════════════════════════════════════════════════
 
 // Ze 题库查询
+
+// ZError/在这学登录集成：复用官网“验证码 + 轮询”登录逻辑
+var _zerrorPollingTimer = null;
+
+function zerrorSafeJson(text) {
+    try { return JSON.parse(text || '{}'); } catch (e) { return {}; }
+}
+
+function zerrorSetStatus(msg, color) {
+    try {
+        var el = top.document.getElementById('zerrorLoginStatus') || document.getElementById('zerrorLoginStatus');
+        if (el) {
+            el.textContent = msg || '';
+            el.style.color = _ne21LogColorMap[color] || color || 'rgba(15,23,42,.48)';
+        }
+    } catch (e) {}
+    if (msg) logger('ZError登录: ' + msg, color || 'gray');
+}
+
+function zerrorGetToken() {
+    var token = '';
+    try { token = GM_getValue('zaizhexue_token', '') || ''; } catch (e) {}
+    if (!token) token = localStorage.getItem('token') || '';
+    return token || '';
+}
+
+function zerrorSaveLogin(token, userInfo) {
+    if (!token) return;
+    try { GM_setValue('zaizhexue_token', token); } catch (e) {}
+    try { GM_setValue('zaizhexue_user', JSON.stringify(userInfo || {})); } catch (e) {}
+    localStorage.setItem('token', token);
+    if (userInfo) {
+        localStorage.setItem('nickname', userInfo.nickname || userInfo.username || '');
+        var uid = userInfo.id || userInfo.ID || userInfo.user_id || userInfo.UserId || userInfo.Id || '';
+        if (uid) localStorage.setItem('user_id', uid);
+        localStorage.setItem('createdTime', userInfo.created_at || userInfo.createdTime || '');
+    }
+}
+
+function zerrorParseLoginResponse(data) {
+    var user = null, token = null;
+    if (data && data.data && data.data.user) {
+        user = data.data.user;
+        token = data.data.token;
+    } else if (data && data.user) {
+        user = data.user;
+        token = data.token || user.token;
+    } else if (data && data.logged_in && data.user) {
+        user = data.user;
+        token = data.token || user.token;
+    }
+    return { user: user, token: token };
+}
+
+function zerrorRequest(method, url, data, headers) {
+    return new Promise(function (resolve) {
+        GM_xmlhttpRequest({
+            method: method,
+            url: url,
+            headers: headers || { 'Content-Type': 'application/json' },
+            data: data ? JSON.stringify(data) : undefined,
+            timeout: 15000,
+            onload: function (res) { resolve({ ok: res.status >= 200 && res.status < 300, status: res.status, data: zerrorSafeJson(res.responseText), text: res.responseText || '' }); },
+            onerror: function () { resolve({ ok: false, status: 0, data: {}, text: 'network error' }); },
+            ontimeout: function () { resolve({ ok: false, status: 0, data: {}, text: 'timeout' }); }
+        });
+    });
+}
+
+function zerrorStopPolling() {
+    if (_zerrorPollingTimer) {
+        clearInterval(_zerrorPollingTimer);
+        _zerrorPollingTimer = null;
+    }
+}
+
+function zerrorStartPolling(code) {
+    zerrorStopPolling();
+    if (!code) return;
+    zerrorSetStatus('已生成验证码，5秒轮询一次；请到公众号发送验证码', 'blue');
+    _zerrorPollingTimer = setInterval(async function () {
+        var res = await zerrorRequest('POST', 'https://app.zaizhexue.top/polling', { verification_code: code });
+        if (res.data && res.data.logged_in === true) {
+            var parsed = zerrorParseLoginResponse(res.data);
+            if (parsed.token) {
+                zerrorStopPolling();
+                zerrorSaveLogin(parsed.token, parsed.user || {});
+                localStorage.removeItem('zerrorVerificationCode');
+                localStorage.removeItem('zerrorVerificationTimestamp');
+                zerrorSetStatus('登录成功，token已保存', 'green');
+            }
+        }
+    }, 5000);
+}
+
+async function zerrorTriggerLoginCode() {
+    var cachedCode = localStorage.getItem('zerrorVerificationCode') || '';
+    var cachedTs = parseInt(localStorage.getItem('zerrorVerificationTimestamp') || '0', 10);
+    if (cachedCode && cachedTs && Date.now() - cachedTs < 300000) {
+        zerrorShowCode(cachedCode);
+        zerrorStartPolling(cachedCode);
+        return;
+    }
+    zerrorSetStatus('正在获取验证码...', 'gray');
+    var res = await zerrorRequest('POST', 'https://app.zaizhexue.top/trigger_login');
+    var code = res.data && (res.data.verification_code || res.data.code);
+    if (code) {
+        localStorage.setItem('zerrorVerificationCode', code);
+        localStorage.setItem('zerrorVerificationTimestamp', String(Date.now()));
+        zerrorShowCode(code);
+        zerrorStartPolling(code);
+    } else {
+        zerrorSetStatus('验证码获取失败 HTTP ' + res.status + ' ' + String(res.text || '').substring(0, 80), 'red');
+    }
+}
+
+function zerrorShowCode(code) {
+    try {
+        var box = top.document.getElementById('zerrorLoginCodeBox') || document.getElementById('zerrorLoginCodeBox');
+        if (box) {
+            box.textContent = code;
+            box.style.display = 'block';
+        }
+    } catch (e) {}
+}
+
+function zerrorCheckLogin() {
+    var token = zerrorGetToken();
+    zerrorSetStatus(token ? '已登录，token=' + token.substring(0, 10) + '...' : '未登录，缺少 token', token ? 'green' : 'orange');
+}
+
+function zerrorLogout() {
+    zerrorStopPolling();
+    try { GM_setValue('zaizhexue_token', ''); GM_setValue('zaizhexue_user', '{}'); } catch (e) {}
+    localStorage.removeItem('token');
+    localStorage.removeItem('nickname');
+    localStorage.removeItem('user_id');
+    localStorage.removeItem('createdTime');
+    localStorage.removeItem('zerrorVerificationCode');
+    localStorage.removeItem('zerrorVerificationTimestamp');
+    zerrorSetStatus('已清除登录信息', 'orange');
+}
+
+function initZErrorLoginUI() {
+    var doc = top.document || document;
+    var courseInput = doc.getElementById('GPTJsSetting.zerrorCourseId');
+    var folderInput = doc.getElementById('GPTJsSetting.zerrorFolderId');
+    if (courseInput) {
+        courseInput.value = localStorage.getItem('GPTJsSetting.zerrorCourseId') || '';
+        courseInput.addEventListener('change', function () { localStorage.setItem('GPTJsSetting.zerrorCourseId', courseInput.value.trim()); });
+    }
+    if (folderInput) {
+        folderInput.value = localStorage.getItem('GPTJsSetting.zerrorFolderId') || '';
+        folderInput.addEventListener('change', function () { localStorage.setItem('GPTJsSetting.zerrorFolderId', folderInput.value.trim()); });
+    }
+    var loginBtn = doc.getElementById('zerrorLoginBtn');
+    var checkBtn = doc.getElementById('zerrorCheckLoginBtn');
+    var logoutBtn = doc.getElementById('zerrorLogoutBtn');
+    var codeBox = doc.getElementById('zerrorLoginCodeBox');
+    if (loginBtn) loginBtn.addEventListener('click', zerrorTriggerLoginCode);
+    if (checkBtn) checkBtn.addEventListener('click', zerrorCheckLogin);
+    if (logoutBtn) logoutBtn.addEventListener('click', zerrorLogout);
+    if (codeBox) codeBox.addEventListener('click', function () {
+        var code = codeBox.textContent || '';
+        if (navigator.clipboard && code) navigator.clipboard.writeText(code);
+        zerrorSetStatus('验证码已复制', 'blue');
+    });
+    var cachedCode = localStorage.getItem('zerrorVerificationCode') || '';
+    var cachedTs = parseInt(localStorage.getItem('zerrorVerificationTimestamp') || '0', 10);
+    if (cachedCode && cachedTs && Date.now() - cachedTs < 300000) zerrorShowCode(cachedCode);
+    zerrorCheckLogin();
+}
+
 function zeQuery(title, options, type) {
     return new Promise(function(resolve) {
         GM_xmlhttpRequest({
