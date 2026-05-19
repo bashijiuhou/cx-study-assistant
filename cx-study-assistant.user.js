@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.4-qb
-// @version             3.2.4
+// @name                cx-study-assistant v3.2.5-qb
+// @version             3.2.5
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -3876,10 +3876,8 @@ async function getAnswer(_t, _q, retryCount = 0) {
                         var _answer = obj.choices[0].message.content.trim();
                         _answer = cleanupAiAnswer(_t, _answer, _payload);
                         if (_answer) {
-                            // AI 答完，异步上传到 Ze 题库
-                            if (retryCount === 0) {
-                                zeUpload(zePayload.title, zePayload.options, zePayload.type, _answer);
-                            }
+                            // AI 答完后暂不上传到 Ze 题库：当前 ZE 查询接口可用，但 /api/add 返回 404/567，并非有效上传接口。
+                            // 如后续确认正确上传端点，再恢复 zeUpload(zePayload.title, zePayload.options, zePayload.type, _answer);
                             updateLogEntry($thinkingLog, "答案:" + _answer, 'purple')
                             resolve(_answer)
                         } else {
