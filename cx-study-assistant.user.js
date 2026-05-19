@@ -3651,7 +3651,7 @@ function zeUpload(title, options, type, answer) {
     return new Promise(function(resolve) {
         GM_xmlhttpRequest({
             method: 'POST',
-            url: 'https://www.zaizhexue.top/api/add',
+            url: 'https://api.zaizhexue.top/api/add',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': 'Bearer c75907b23dceddfab0b8ed83920363a9075f1633ca49dc6ac8412010374d06a8dc5148fc070ff3f2a03d56df321fa6df787dd78d3aa47a'
