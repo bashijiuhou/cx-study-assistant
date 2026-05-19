@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.11-qb
-// @version             3.2.11
+// @name                cx-study-assistant v3.2.12-qb
+// @version             3.2.12
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -460,6 +460,8 @@ function showBox() {
                                 <button type="button" id="zerrorLogoutBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">清除</button>
                             </div>
                             <div id="zerrorLoginCodeBox" class="ne21-code-box" style="display:none;" title="点击复制验证码"></div>
+                            <div class="ne21-mini-row"><select id="zerrorCourseSelect" class="ne21-select" style="flex:1;"><option value="">选择课程</option></select><button type="button" id="zerrorLoadCoursesBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">加载课程</button></div>
+                            <div class="ne21-mini-row"><select id="zerrorFolderSelect" class="ne21-select" style="flex:1;"><option value="">选择文件夹</option></select></div>
                             <div class="ne21-mini-row"><input id="GPTJsSetting.zerrorCourseId" class="ne21-input" placeholder="courseId"><input id="GPTJsSetting.zerrorFolderId" class="ne21-input" placeholder="folderId"><button type="button" id="zerrorSaveConfigBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">保存配置</button></div>
                             <span id="zerrorLoginStatus" class="ne21-setting-tip"></span>
                         </label>
@@ -3879,6 +3881,101 @@ function zerrorSaveUploadConfig(showStatus) {
     return cfg;
 }
 
+function zerrorParseJson(text) {
+    try { return JSON.parse(text || '{}'); } catch (e) { return null; }
+}
+
+function zerrorSetSelectOptions(selectEl, items, placeholder, selectedId) {
+    if (!selectEl) return;
+    selectEl.innerHTML = '';
+    var opt0 = document.createElement('option');
+    opt0.value = '';
+    opt0.textContent = placeholder || '请选择';
+    selectEl.appendChild(opt0);
+    (items || []).forEach(function (item) {
+        var opt = document.createElement('option');
+        opt.value = String(item.ID || item.id || '');
+        opt.textContent = (item.Name || item.name || item.Title || item.title || opt.value) + (opt.value ? ' (' + opt.value + ')' : '');
+        selectEl.appendChild(opt);
+    });
+    if (selectedId) selectEl.value = String(selectedId);
+}
+
+function zerrorFetchJson(url, token) {
+    return new Promise(function(resolve, reject) {
+        GM_xmlhttpRequest({
+            method: 'GET',
+            url: url,
+            headers: token ? { Authorization: token } : {},
+            timeout: 15000,
+            onload: function(response) {
+                var data = zerrorParseJson(response.responseText);
+                if (response.status >= 200 && response.status < 300) resolve(data);
+                else reject(new Error('HTTP ' + response.status + ' ' + String(response.responseText || '').substring(0, 120)));
+            },
+            onerror: function(err) { reject(new Error((err && err.error) || '网络失败')); },
+            ontimeout: function() { reject(new Error('超时')); }
+        });
+    });
+}
+
+function zerrorFetchCampus(token) {
+    return zerrorFetchJson('https://campuses.zerror.cc/user/campus', token);
+}
+
+function zerrorLoadCourses() {
+    var token = zerrorGetToken();
+    var doc = zerrorGetDocument();
+    var courseSelect = doc.getElementById('zerrorCourseSelect');
+    var folderSelect = doc.getElementById('zerrorFolderSelect');
+    if (!token) {
+        zerrorSetStatus('请先保存 ZError token', 'orange');
+        return Promise.resolve();
+    }
+    zerrorSetStatus('正在读取校园/课程...', 'gray');
+    if (courseSelect) courseSelect.disabled = true;
+    if (folderSelect) folderSelect.disabled = true;
+    return zerrorFetchCampus(token).then(function(campusInfo) {
+        if (!campusInfo || !campusInfo.campus || !campusInfo.campus.ID) {
+            throw new Error('未绑定校园，请先到 ZError 绑定校园');
+        }
+        localStorage.setItem('GPTJsSetting.zerrorCampusId', String(campusInfo.campus.ID));
+        return zerrorFetchJson('https://campuses.zerror.cc/campus/' + encodeURIComponent(campusInfo.campus.ID) + '/courses', token);
+    }).then(function(courses) {
+        if (!Array.isArray(courses)) courses = [];
+        window.__zerrorCourses = courses;
+        zerrorSetSelectOptions(courseSelect, courses, courses.length ? '选择课程' : '没有课程', localStorage.getItem('GPTJsSetting.zerrorCourseId') || '');
+        zerrorSetStatus('课程已加载 ' + courses.length + ' 个', courses.length ? 'green' : 'orange');
+        var selected = courseSelect && courseSelect.value;
+        if (selected) return zerrorLoadFolders(selected);
+    }).catch(function(err) {
+        zerrorSetStatus('课程加载失败: ' + err.message, 'red');
+    }).finally(function() {
+        if (courseSelect) courseSelect.disabled = false;
+        if (folderSelect) folderSelect.disabled = false;
+    });
+}
+
+function zerrorLoadFolders(courseId) {
+    var token = zerrorGetToken();
+    var doc = zerrorGetDocument();
+    var folderSelect = doc.getElementById('zerrorFolderSelect');
+    if (!token || !courseId) return Promise.resolve();
+    zerrorSetStatus('正在读取文件夹...', 'gray');
+    if (folderSelect) folderSelect.disabled = true;
+    return zerrorFetchJson('https://campuses.zerror.cc/courses/' + encodeURIComponent(courseId), token).then(function(data) {
+        var folders = data && Array.isArray(data.folders) ? data.folders : [];
+        folders.sort(function(a, b) { return new Date(b.UpdatedAt || b.updatedAt || 0) - new Date(a.UpdatedAt || a.updatedAt || 0); });
+        window.__zerrorFolders = folders;
+        zerrorSetSelectOptions(folderSelect, folders, folders.length ? '选择文件夹' : '没有文件夹', localStorage.getItem('GPTJsSetting.zerrorFolderId') || '');
+        zerrorSetStatus('文件夹已加载 ' + folders.length + ' 个', folders.length ? 'green' : 'orange');
+    }).catch(function(err) {
+        zerrorSetStatus('文件夹加载失败: ' + err.message, 'red');
+    }).finally(function() {
+        if (folderSelect) folderSelect.disabled = false;
+    });
+}
+
 
 function zerrorLogout() {
     zerrorStopPolling();
@@ -3904,6 +4001,9 @@ function initZErrorLoginUI() {
         folderInput.value = localStorage.getItem('GPTJsSetting.zerrorFolderId') || '';
         folderInput.addEventListener('change', function () { localStorage.setItem('GPTJsSetting.zerrorFolderId', folderInput.value.trim()); });
     }
+    var courseSelect = doc.getElementById('zerrorCourseSelect');
+    var folderSelect = doc.getElementById('zerrorFolderSelect');
+    var loadCoursesBtn = doc.getElementById('zerrorLoadCoursesBtn');
     var saveConfigBtn = doc.getElementById('zerrorSaveConfigBtn');
     var manualTokenInput = doc.getElementById('zerrorManualToken');
     var saveTokenBtn = doc.getElementById('zerrorSaveTokenBtn');
@@ -3912,12 +4012,30 @@ function initZErrorLoginUI() {
     var logoutBtn = doc.getElementById('zerrorLogoutBtn');
     var codeBox = doc.getElementById('zerrorLoginCodeBox');
     var saveConfigSilently = function () { zerrorSaveUploadConfig(false); };
+    if (courseSelect) {
+        courseSelect.addEventListener('change', function () {
+            if (courseInput) courseInput.value = courseSelect.value;
+            localStorage.setItem('GPTJsSetting.zerrorCourseId', courseSelect.value || '');
+            if (folderInput) folderInput.value = '';
+            localStorage.removeItem('GPTJsSetting.zerrorFolderId');
+            zerrorLoadFolders(courseSelect.value);
+        });
+    }
+    if (folderSelect) {
+        folderSelect.addEventListener('change', function () {
+            if (folderInput) folderInput.value = folderSelect.value;
+            localStorage.setItem('GPTJsSetting.zerrorFolderId', folderSelect.value || '');
+            zerrorSaveUploadConfig(false);
+        });
+    }
+    if (loadCoursesBtn) loadCoursesBtn.addEventListener('click', zerrorLoadCourses);
     if (courseInput) { courseInput.addEventListener('input', saveConfigSilently); courseInput.addEventListener('blur', saveConfigSilently); }
     if (folderInput) { folderInput.addEventListener('input', saveConfigSilently); folderInput.addEventListener('blur', saveConfigSilently); }
     if (saveConfigBtn) saveConfigBtn.addEventListener('click', function () { zerrorSaveUploadConfig(true); });
     if (manualTokenInput) manualTokenInput.value = zerrorGetToken();
-    if (saveTokenBtn) saveTokenBtn.addEventListener('click', zerrorSaveManualToken);
-    if (manualTokenInput) manualTokenInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') zerrorSaveManualToken(); });
+    if (saveTokenBtn) saveTokenBtn.addEventListener('click', function () { zerrorSaveManualToken(); zerrorLoadCourses(); });
+    if (manualTokenInput) manualTokenInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { zerrorSaveManualToken(); zerrorLoadCourses(); } });
+    if (zerrorGetToken()) setTimeout(zerrorLoadCourses, 300);
     if (loginBtn) loginBtn.addEventListener('click', zerrorTriggerLoginCode);
     if (checkBtn) checkBtn.addEventListener('click', zerrorCheckLogin);
     if (logoutBtn) logoutBtn.addEventListener('click', zerrorLogout);
