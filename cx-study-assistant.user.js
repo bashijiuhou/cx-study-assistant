@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.7-qb
-// @version             3.2.7
+// @name                cx-study-assistant v3.2.8-qb
+// @version             3.2.8
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -118,10 +118,11 @@ if (_l.hostname == 'i.mooc.chaoxing.com' || _l.hostname == "i.chaoxing.com") {
     waitForJQueryElement('#phone').then(function () { autoLogin() });
 } else if (_l.pathname.includes('/mycourse/studentstudy')) {
     showBox()
-    $('#ne-21log', window.parent.document).html('初始化完毕！')
+    $('#ne-21log', zerrorGetDocument()).html('初始化完毕！')
     setupAntiSleep()
     setupAutoRefresh()
 } else if (_l.pathname.includes('/knowledge/cards')) {
+    showBox()
     setupAntiSleep()
     var params = getTaskParams()
     var parsedParams = null;
@@ -354,10 +355,11 @@ function findAnswerTextareas($container) {
 
 function showBox() {
     //公告&充值
-    if (setting.showBox && top.document.querySelector('#ne-21notice') == undefined) {
+    var panelDoc = zerrorGetDocument();
+    if (setting.showBox && panelDoc.querySelector('#ne-21notice') == undefined) {
         // 注入样式（仅一次）
-        if (!top.document.getElementById('ne-21style')) {
-            var styleEl = top.document.createElement('style');
+        if (!panelDoc.getElementById('ne-21style')) {
+            var styleEl = panelDoc.createElement('style');
             styleEl.id = 'ne-21style';
             styleEl.textContent = `
             /* === Liquid Glass UI (iOS 26 style, neutral light glass) === */
@@ -428,7 +430,7 @@ function showBox() {
             #ne-21box #ne-21log hr{display:none;}
             #ne-21box #ne-21log .ne21-time{color:rgba(15,23,42,.4);margin-right:6px;}
             `;
-            top.document.head.appendChild(styleEl);
+            panelDoc.head.appendChild(styleEl);
         }
         var box_html = `
             <div id="ne-21box">
@@ -476,11 +478,11 @@ function showBox() {
                 </div>
             </div>
         `;
-        $(box_html).appendTo('body');
+        $(box_html).appendTo(panelDoc.body);
 
         // 恢复保存的位置与收起/展开状态
         (function () {
-            var $box = $('#ne-21box');
+            var $box = $('#ne-21box', panelDoc);
             // 恢复位置
             try {
                 var savedPos = localStorage.getItem('GPTJsSetting.boxPosition');
@@ -499,16 +501,16 @@ function showBox() {
             // 恢复收起/展开状态
             if (localStorage.getItem('GPTJsSetting.boxCollapsed') === 'true') {
                 $box.addClass('ne21-collapsed');
-                $('#ne-21close').text('+').attr('aria-label', '展开');
+                $('#ne-21close', panelDoc).text('+').attr('aria-label', '展开');
             }
         })();
 
         // 收起/展开按钮：切换 .ne21-collapsed，按钮文本在 − / + 之间切换
-        $('#ne-21close').on('mousedown', function (e) {
+        $('#ne-21close', panelDoc).on('mousedown', function (e) {
             e.stopPropagation(); // 避免触发标题栏拖动
         }).on('click', function (e) {
             e.stopPropagation();
-            var collapsed = $('#ne-21box').toggleClass('ne21-collapsed').hasClass('ne21-collapsed');
+            var collapsed = $('#ne-21box', panelDoc).toggleClass('ne21-collapsed').hasClass('ne21-collapsed');
             $(this).text(collapsed ? '+' : '−');
             $(this).attr('aria-label', collapsed ? '展开' : '收起');
             // 持久化收起/展开状态
@@ -516,7 +518,7 @@ function showBox() {
         });
         // 标题栏拖动：拖动结束后写入 localStorage，刷新后保持上次位置
         (function () {
-            var $box = $('#ne-21box');
+            var $box = $('#ne-21box', panelDoc);
             var $header = $box.find('.ne21-header');
             var dragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
             $header.on('mousedown', function (e) {
@@ -533,7 +535,7 @@ function showBox() {
                 $('body').css('user-select', 'none');
                 e.preventDefault();
             });
-            $(document).on('mousemove.ne21drag', function (e) {
+            $(panelDoc).on('mousemove.ne21drag', function (e) {
                 if (!dragging) return;
                 var nx = startLeft + (e.clientX - startX);
                 var ny = startTop + (e.clientY - startY);
@@ -558,14 +560,14 @@ function showBox() {
 
         // 设置面板切换 + 复选框监听器
         (function () {
-            var moreSettings = document.getElementById('moreSettings');
-            var userInfo = document.getElementById('userInfo');
+            var moreSettings = panelDoc.getElementById('moreSettings');
+            var userInfo = panelDoc.getElementById('userInfo');
             if (!moreSettings || !userInfo) return;
 
             // #moreSettingsBtn 由 $('#ne-21notice').html(...) 在后面动态注入，
             // 此时还不存在，且每次 showBox() 都会被重建，因此使用事件委托。
             var isSettingsVisible = false;
-            $('#ne-21box').on('click', '#moreSettingsBtn', function () {
+            $('#ne-21box', panelDoc).on('click', '#moreSettingsBtn', function () {
                 userInfo.style.display = isSettingsVisible ? 'block' : 'none';
                 moreSettings.style.display = isSettingsVisible ? 'none' : 'block';
                 this.textContent = isSettingsVisible ? '设置' : '返回';
@@ -582,14 +584,14 @@ function showBox() {
             }
 
             ['sub', 'force', 'examTurn', 'goodStudent', 'alterTitle', 'redo', 'fuzzyMatch'].forEach(function (settingId) {
-                var checkbox = document.getElementById('GPTJsSetting.' + settingId);
+                var checkbox = panelDoc.getElementById('GPTJsSetting.' + settingId);
                 if (!checkbox) return;
                 checkbox.addEventListener('change', updateLocalStorage);
                 checkbox.checked = localStorage.getItem('GPTJsSetting.' + settingId) === 'true';
             });
 
             // 倍速下拉：恢复上次选择并持久化
-            var rateSelect = document.getElementById('GPTJsSetting.rate');
+            var rateSelect = panelDoc.getElementById('GPTJsSetting.rate');
             if (rateSelect) {
                 rateSelect.value = localStorage.getItem('GPTJsSetting.rate') || '1';
                 rateSelect.addEventListener('change', function () {
@@ -597,7 +599,7 @@ function showBox() {
                 });
             }
             // 搜题间隔输入框：恢复上次值并持久化（范围 0~60 秒）
-            var reqIntervalInput = document.getElementById('GPTJsSetting.reqIntervalTime');
+            var reqIntervalInput = panelDoc.getElementById('GPTJsSetting.reqIntervalTime');
             if (reqIntervalInput) {
                 var savedInterval = localStorage.getItem('GPTJsSetting.reqIntervalTime');
                 reqIntervalInput.value = (savedInterval !== null && isFinite(parseInt(savedInterval, 10)))
@@ -615,10 +617,10 @@ function showBox() {
             initZErrorLoginUI();
         })();
     } else {
-        $('#ne-21log', window.parent.document).html('')
+        $('#ne-21log', zerrorGetDocument()).html('')
     }
     let _u = getCk('_uid') || getCk('UID')
-    $('#ne-21notice').html(`
+    $('#ne-21notice', panelDoc).html(`
         <div class="ne21-uid">学习通账号 UID：<b>${_u || '-'}</b></div>
         <div class="ne21-row">
             <a target="_blank" href="${_host}?uid=${_u}" style="text-decoration:none;flex:0 0 auto;">
@@ -645,9 +647,9 @@ function showBox() {
     };
     var lastSelectedModel = localStorage.getItem('GPTJsSetting.model') || _defaultModel;
     lastSelectedModel = _modelCompat[lastSelectedModel] || lastSelectedModel;
-    $('#modelSelect').val(lastSelectedModel);
+    $('#modelSelect', panelDoc).val(lastSelectedModel);
     // 同步绑定 change 监听（命名空间避免 showBox 重入时重复绑定）
-    $('#modelSelect').off('change.gptjsModel').on('change.gptjsModel', function () {
+    $('#modelSelect', panelDoc).off('change.gptjsModel').on('change.gptjsModel', function () {
         localStorage.setItem('GPTJsSetting.model', $(this).val());
     });
 
@@ -664,7 +666,7 @@ function logger(str, color) {
     var _time = new Date().toLocaleTimeString()
     var c = _ne21LogColorMap[color] || color || '#334155'
     var $p = $('<p><span class="ne21-time">[' + _time + ']</span><span class="ne21-msg" style="color:' + c + ';">' + str + '</span></p>')
-    $('#ne-21log', window.parent.document).prepend($p)
+    $('#ne-21log', zerrorGetDocument()).prepend($p)
     return $p
 }
 // 原地更新一条已存在的日志(由 logger 返回的 jQuery <p> 元素)。
@@ -761,7 +763,7 @@ function toNext() {
 
         // 点击章节内 “下一页” 按钮（仅在当前课时尚有页面时使用，避免误跳到下一章节）
         function clickNextPageBtn() {
-            $('#ne-21log', window.parent.document).html('')
+            $('#ne-21log', zerrorGetDocument()).html('')
             var nextBtn = top.document.querySelector('#mainid > .prev_next.next')
             if (nextBtn) { nextBtn.click(); return true }
             return false
@@ -770,7 +772,7 @@ function toNext() {
         // 点击 “下一章节” 按钮：优先尝试章节内的“下一页/下一节”统一按钮，
         // 找不到时再退回 #prevNextFocusNext（仅用于章节级跳转）
         function clickNextChapterBtn() {
-            $('#ne-21log', window.parent.document).html('')
+            $('#ne-21log', zerrorGetDocument()).html('')
             var nextBtn = top.document.querySelector('#mainid > .prev_next.next')
             if (nextBtn) { nextBtn.click(); return true }
             var focusBtn = top.document.querySelector('#prevNextFocusNext')
@@ -3514,13 +3516,13 @@ var _ne21ThinkingCount = 0;
 function showThinking() {
     _ne21ThinkingCount++;
     if (_ne21ThinkingCount === 1) {
-        $('#ne-21thinking', window.parent.document).addClass('ne21-active');
+        $('#ne-21thinking', zerrorGetDocument()).addClass('ne21-active');
     }
 }
 function hideThinking() {
     if (_ne21ThinkingCount > 0) _ne21ThinkingCount--;
     if (_ne21ThinkingCount === 0) {
-        $('#ne-21thinking', window.parent.document).removeClass('ne21-active');
+        $('#ne-21thinking', zerrorGetDocument()).removeClass('ne21-active');
     }
 }
 
