@@ -1,12 +1,13 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.1-qb
-// @version             3.2.1
+// @name                cx-study-assistant v3.2.2-qb
+// @version             3.2.2
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
 // @tag                 自建API
 // @connect api.bashijiuhou.com
 // @connect api.zaizhexue.top
+// @connect zaizhexue.top
 // @run-at              document-end
 // @grant               unsafeWindow
 // @grant               GM_xmlhttpRequest
@@ -3526,6 +3527,26 @@ function buildPrompt(opts) {
 }
 
 // AIç­æ¡åå¤çï¼å»é¤å¼å¯¼è¯­ãåºå·ãæ ç¹åç¼ç­
+
+
+// 从 buildPrompt 的 JSON payload 中提取 ZE 题库需要的 title/options/type
+function buildZePayload(_t, _payload, _display) {
+    var title = _display || _payload || '';
+    var options = '';
+    try {
+        var obj = JSON.parse(_payload || '{}');
+        if (obj.question) title = String(obj.question).trim();
+        if (Array.isArray(obj.options)) options = obj.options.map(function (x) { return String(x == null ? '' : x).trim(); }).filter(Boolean).join('|');
+    } catch (e) {
+        // 兼容旧字符串调用：无法解析时使用 display/payload 作为题干，options 留空
+    }
+    return {
+        title: String(title || '').trim(),
+        options: String(options || '').trim(),
+        type: String(_t)
+    };
+}
+
 function cleanupAiAnswer(questionType, answerText, questionText) {
     let answer = String(answerText || '').trim();
     answer = answer.replace(/^```[\w-]*\s*/, '').replace(/```$/, '').trim();
@@ -3634,17 +3655,27 @@ function zeQuery(title, options, type) {
             onload: function(response) {
                 try {
                     var res = JSON.parse(response.responseText);
-                    if (res.data && res.data.code === 0) {
-                        resolve({hit: true, answer: res.data.msg || res.data.data});
+                    var payload = res.data || res;
+                    // 学 OCS 的 handler 思路：返回 [question, answer, extra]
+                    // 这里 msg 多数是提示/题干，不能当答案；只认 data/answer。
+                    var answer = undefined;
+                    if (payload) {
+                        if (typeof payload.data === 'string' && payload.data.trim()) answer = payload.data.trim();
+                        else if (Array.isArray(payload.data) && payload.data.length) answer = payload.data.join('|');
+                        else if (payload.data && typeof payload.data.answer === 'string' && payload.data.answer.trim()) answer = payload.data.answer.trim();
+                        else if (payload.answer && String(payload.answer).trim()) answer = String(payload.answer).trim();
+                    }
+                    if (answer && !/解析失败|请求体|未找到|不存在|error|错误/i.test(answer)) {
+                        resolve({hit: true, answer: answer});
                     } else {
-                        resolve({hit: false});
+                        resolve({hit: false, msg: payload && payload.msg ? payload.msg : ''});
                     }
                 } catch (e) {
-                    resolve({hit: false});
+                    resolve({hit: false, msg: '响应解析失败'});
                 }
             },
-            onerror: function() { resolve({hit: false}); },
-            ontimeout: function() { resolve({hit: false}); }
+            onerror: function() { resolve({hit: false, msg: '网络失败'}); },
+            ontimeout: function() { resolve({hit: false, msg: '超时'}); }
         });
     });
 }
@@ -3713,9 +3744,10 @@ async function getAnswer(_t, _q, retryCount = 0) {
     logger(_qPrefix + '题目:' + _display, 'pink')
 
     // === Ze 题库查询（仅限首次尝试）===
+    var zePayload = buildZePayload(_t, _payload, _display);
     if (retryCount === 0) {
         try {
-            var zeRes = await zeQuery(_payload, '', _t);
+            var zeRes = await zeQuery(zePayload.title, zePayload.options, zePayload.type);
             if (zeRes.hit) {
                 logger(_qPrefix + '📚 Ze题库命中: ' + zeRes.answer, 'green');
                 return zeRes.answer;
@@ -3823,7 +3855,7 @@ async function getAnswer(_t, _q, retryCount = 0) {
                         if (_answer) {
                             // AI 答完，异步上传到 Ze 题库
                             if (retryCount === 0) {
-                                zeUpload(_payload, '', _t, _answer);
+                                zeUpload(zePayload.title, zePayload.options, zePayload.type, _answer);
                             }
                             updateLogEntry($thinkingLog, "答案:" + _answer, 'purple')
                             resolve(_answer)
