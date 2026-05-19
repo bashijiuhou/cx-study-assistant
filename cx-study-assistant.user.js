@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.21-qb
-// @version             3.2.21
+// @name                cx-study-assistant v3.2.22-qb
+// @version             3.2.22
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -3663,7 +3663,7 @@ function zeQuery(title, options, type) {
             url: 'https://api.zaizhexue.top/api/query',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': 'Bearer c75907b23dceddfab0b8ed83920363a9075f1633ca49dc6ac8412010374d06a8dc5148fc070ff3f2a03d56df321fa6df787dd78d3aa47a'
+                'Authorization': 'Bearer 0906281b2abb21e4a36dbeb8a0da90b6e40747532ae098c7f0062c45ec3ec5c3241066e98fbbeced58cb35985ac28ea7650a5784b611fd'
             },
             data: JSON.stringify({
                 title: title || '',
