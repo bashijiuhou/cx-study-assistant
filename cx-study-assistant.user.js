@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.14-qb
-// @version             3.2.14
+// @name                cx-study-assistant v3.2.15-qb
+// @version             3.2.15
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -460,7 +460,7 @@ function showBox() {
                                 <button type="button" id="zerrorLogoutBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">清除</button>
                             </div>
                             <div id="zerrorLoginCodeBox" class="ne21-code-box" style="display:none;" title="点击复制验证码"></div>
-                            <div class="ne21-mini-row"><input id="GPTJsSetting.zerrorCampusId" class="ne21-input" placeholder="campusId(可选)"><button type="button" id="zerrorLoadCoursesBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">加载课程</button></div>
+                            <div class="ne21-mini-row"><input id="GPTJsSetting.zerrorCampusId" class="ne21-input" placeholder="campusId(可选)"><button type="button" id="zerrorLoadCoursesBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">加载课程</button><button type="button" id="zerrorOpenTikuBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">打开官网</button></div>
                             <div class="ne21-mini-row"><select id="zerrorCourseSelect" class="ne21-select" style="flex:1;"><option value="">选择课程</option></select></div>
                             <div class="ne21-mini-row"><select id="zerrorFolderSelect" class="ne21-select" style="flex:1;"><option value="">选择文件夹</option></select></div>
                             <div class="ne21-mini-row"><input id="GPTJsSetting.zerrorCourseId" class="ne21-input" placeholder="courseId"><input id="GPTJsSetting.zerrorFolderId" class="ne21-input" placeholder="folderId"><button type="button" id="zerrorSaveConfigBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">保存配置</button></div>
@@ -4074,8 +4074,10 @@ function initZErrorLoginUI() {
     if (folderInput) { folderInput.addEventListener('input', saveConfigSilently); folderInput.addEventListener('blur', saveConfigSilently); }
     if (saveConfigBtn) saveConfigBtn.addEventListener('click', function () { zerrorSaveUploadConfig(true); });
     if (manualTokenInput) manualTokenInput.value = zerrorGetToken();
-    if (saveTokenBtn) saveTokenBtn.addEventListener('click', function () { zerrorSaveManualToken(); zerrorLoadCourses(); });
-    if (manualTokenInput) manualTokenInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { zerrorSaveManualToken(); zerrorLoadCourses(); } });
+    var openTikuBtn = doc.getElementById('zerrorOpenTikuBtn');
+    if (openTikuBtn) openTikuBtn.addEventListener('click', function () { window.open('https://tiku.zerror.cc/dashboard?section=courses', '_blank'); });
+    if (saveTokenBtn) saveTokenBtn.addEventListener('click', function () { zerrorSaveManualToken(); zerrorSetStatus('token已保存；可直接填写 courseId/folderId 上传，不必加载课程', 'green'); });
+    if (manualTokenInput) manualTokenInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { zerrorSaveManualToken(); zerrorSetStatus('token已保存；可直接填写 courseId/folderId 上传', 'green'); } });
     // 不自动加载课程，避免页面打开后接口卡住；用户点击“加载课程”时再请求。
     if (loginBtn) loginBtn.addEventListener('click', zerrorTriggerLoginCode);
     if (checkBtn) checkBtn.addEventListener('click', zerrorCheckLogin);
@@ -4145,9 +4147,14 @@ function zeTypeToZErrorType(type) {
     };
     return m[String(type)] || 'single_choice';
 }
+function zeNormalizeToken(token) {
+    token = String(token || '').trim();
+    if (!token) return '';
+    return /^Bearer\s+/i.test(token) ? token : 'Bearer ' + token;
+}
+
 function zeUpload(title, options, type, answer) {
-    var token = '';
-    try { token = GM_getValue('zaizhexue_token', '') || ''; } catch (e) {}
+    var token = zerrorGetToken();
     var uiCfg = zerrorReadUploadConfigFromUI();
     var courseId = uiCfg.courseId || localStorage.getItem('GPTJsSetting.zerrorCourseId') || '';
     var folderId = uiCfg.folderId || localStorage.getItem('GPTJsSetting.zerrorFolderId') || '';
@@ -4156,11 +4163,16 @@ function zeUpload(title, options, type, answer) {
         if (folderId) localStorage.setItem('GPTJsSetting.zerrorFolderId', folderId);
     }
     if (!token) {
-        logger('📤 题库上传: 未登录ZError/在这学，缺少 zaizhexue_token', 'orange');
+        logger('📤 题库上传: 未配置token，请从ZError官网localStorage复制token到浮窗保存', 'orange');
         return Promise.resolve();
     }
     if (!courseId || !folderId) {
-        logger('📤 题库上传: 未配置 courseId/folderId，请在浮窗设置里填写并保存配置', 'orange');
+        logger('📤 题库上传: 未配置 courseId/folderId；可打开ZError官网，在校园题库URL/接口里复制对应ID后手填保存', 'orange');
+        return Promise.resolve();
+    }
+    var folderNum = parseInt(folderId, 10);
+    if (!isFinite(folderNum)) {
+        logger('📤 题库上传: folderId必须是数字', 'orange');
         return Promise.resolve();
     }
     var optionArr = [];
@@ -4172,35 +4184,52 @@ function zeUpload(title, options, type, answer) {
         answer: answer || '',
         options: JSON.stringify(optionArr),
         add_to_top: false,
-        question_bank_id: parseInt(folderId)
+        question_bank_id: folderNum
     };
-    logger('📤 题库上传: 开始', 'gray');
+    logger('📤 题库上传: 开始 course=' + courseId + ' folder=' + folderId, 'gray');
     return new Promise(function(resolve) {
+        var settled = false;
+        var hardTimer = setTimeout(function () {
+            if (settled) return;
+            settled = true;
+            logger('📤 题库上传: 硬超时（请求无回调）', 'red');
+            resolve();
+        }, 20000);
+        function done(msg, color) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(hardTimer);
+            if (msg) logger(msg, color || 'gray');
+            resolve();
+        }
         GM_xmlhttpRequest({
             method: 'POST',
             url: 'https://campuses.zerror.cc/courses/' + encodeURIComponent(courseId) + '/questions',
             headers: {
+                'Accept': 'application/json, text/plain, */*',
                 'Content-Type': 'application/json',
-                'Authorization': token
+                'Authorization': zeNormalizeToken(token)
             },
             data: JSON.stringify(payload),
             timeout: 15000,
+            anonymous: false,
             onload: function(response) {
+                var body = String(response.responseText || '');
                 if (response.status >= 200 && response.status < 300) {
-                    logger('📤 题库上传: 成功', 'green');
+                    done('📤 题库上传: 成功', 'green');
+                } else if (response.status === 401 || response.status === 403) {
+                    done('📤 题库上传: 鉴权失败 HTTP ' + response.status + '，请重新从ZError官网复制token', 'orange');
+                } else if (response.status === 404) {
+                    done('📤 题库上传: 404，请检查 courseId 是否正确', 'orange');
+                } else if (response.status === 422 || response.status === 400) {
+                    done('📤 题库上传: 参数错误 HTTP ' + response.status + '，请检查 folderId/题型 ' + body.substring(0, 120), 'orange');
                 } else {
-                    logger('📤 题库上传: 失败 HTTP ' + response.status + ' ' + String(response.responseText || '').substring(0, 120), 'orange');
+                    done('📤 题库上传: 失败 HTTP ' + response.status + ' ' + body.substring(0, 120), 'orange');
                 }
-                resolve();
             },
-            onerror: function(err) {
-                logger('📤 题库上传: 网络失败 ' + (err && err.error ? err.error : ''), 'red');
-                resolve();
-            },
-            ontimeout: function() {
-                logger('📤 题库上传: 超时', 'red');
-                resolve();
-            }
+            onerror: function(err) { done('📤 题库上传: 网络失败 ' + (err && (err.error || err.message) ? (err.error || err.message) : ''), 'red'); },
+            onabort: function() { done('📤 题库上传: 请求取消', 'red'); },
+            ontimeout: function() { done('📤 题库上传: 超时', 'red'); }
         });
     });
 }
