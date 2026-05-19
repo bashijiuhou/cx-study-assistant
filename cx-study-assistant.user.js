@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.10-qb
-// @version             3.2.10
+// @name                cx-study-assistant v3.2.11-qb
+// @version             3.2.11
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -460,7 +460,7 @@ function showBox() {
                                 <button type="button" id="zerrorLogoutBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">清除</button>
                             </div>
                             <div id="zerrorLoginCodeBox" class="ne21-code-box" style="display:none;" title="点击复制验证码"></div>
-                            <div class="ne21-mini-row"><input id="GPTJsSetting.zerrorCourseId" class="ne21-input" placeholder="courseId"><input id="GPTJsSetting.zerrorFolderId" class="ne21-input" placeholder="folderId"></div>
+                            <div class="ne21-mini-row"><input id="GPTJsSetting.zerrorCourseId" class="ne21-input" placeholder="courseId"><input id="GPTJsSetting.zerrorFolderId" class="ne21-input" placeholder="folderId"><button type="button" id="zerrorSaveConfigBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">保存配置</button></div>
                             <span id="zerrorLoginStatus" class="ne21-setting-tip"></span>
                         </label>
                         <p></p>
@@ -3860,6 +3860,25 @@ function zerrorSaveManualToken() {
     zerrorSetStatus('手动 token 已保存，会固定使用直到清除或失效', 'green');
 }
 
+function zerrorReadUploadConfigFromUI() {
+    var doc = zerrorGetDocument();
+    var courseInput = doc.getElementById('GPTJsSetting.zerrorCourseId');
+    var folderInput = doc.getElementById('GPTJsSetting.zerrorFolderId');
+    var courseId = courseInput ? String(courseInput.value || '').trim() : '';
+    var folderId = folderInput ? String(folderInput.value || '').trim() : '';
+    return { courseId: courseId, folderId: folderId };
+}
+
+function zerrorSaveUploadConfig(showStatus) {
+    var cfg = zerrorReadUploadConfigFromUI();
+    if (cfg.courseId) localStorage.setItem('GPTJsSetting.zerrorCourseId', cfg.courseId);
+    if (cfg.folderId) localStorage.setItem('GPTJsSetting.zerrorFolderId', cfg.folderId);
+    if (showStatus) {
+        zerrorSetStatus(cfg.courseId && cfg.folderId ? '题库配置已保存' : '请填写 courseId 和 folderId 后保存', cfg.courseId && cfg.folderId ? 'green' : 'orange');
+    }
+    return cfg;
+}
+
 
 function zerrorLogout() {
     zerrorStopPolling();
@@ -3885,12 +3904,17 @@ function initZErrorLoginUI() {
         folderInput.value = localStorage.getItem('GPTJsSetting.zerrorFolderId') || '';
         folderInput.addEventListener('change', function () { localStorage.setItem('GPTJsSetting.zerrorFolderId', folderInput.value.trim()); });
     }
+    var saveConfigBtn = doc.getElementById('zerrorSaveConfigBtn');
     var manualTokenInput = doc.getElementById('zerrorManualToken');
     var saveTokenBtn = doc.getElementById('zerrorSaveTokenBtn');
     var loginBtn = doc.getElementById('zerrorLoginBtn');
     var checkBtn = doc.getElementById('zerrorCheckLoginBtn');
     var logoutBtn = doc.getElementById('zerrorLogoutBtn');
     var codeBox = doc.getElementById('zerrorLoginCodeBox');
+    var saveConfigSilently = function () { zerrorSaveUploadConfig(false); };
+    if (courseInput) { courseInput.addEventListener('input', saveConfigSilently); courseInput.addEventListener('blur', saveConfigSilently); }
+    if (folderInput) { folderInput.addEventListener('input', saveConfigSilently); folderInput.addEventListener('blur', saveConfigSilently); }
+    if (saveConfigBtn) saveConfigBtn.addEventListener('click', function () { zerrorSaveUploadConfig(true); });
     if (manualTokenInput) manualTokenInput.value = zerrorGetToken();
     if (saveTokenBtn) saveTokenBtn.addEventListener('click', zerrorSaveManualToken);
     if (manualTokenInput) manualTokenInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') zerrorSaveManualToken(); });
@@ -3965,14 +3989,19 @@ function zeTypeToZErrorType(type) {
 function zeUpload(title, options, type, answer) {
     var token = '';
     try { token = GM_getValue('zaizhexue_token', '') || ''; } catch (e) {}
-    var courseId = localStorage.getItem('GPTJsSetting.zerrorCourseId') || '';
-    var folderId = localStorage.getItem('GPTJsSetting.zerrorFolderId') || '';
+    var uiCfg = zerrorReadUploadConfigFromUI();
+    var courseId = uiCfg.courseId || localStorage.getItem('GPTJsSetting.zerrorCourseId') || '';
+    var folderId = uiCfg.folderId || localStorage.getItem('GPTJsSetting.zerrorFolderId') || '';
+    if (uiCfg.courseId || uiCfg.folderId) {
+        if (courseId) localStorage.setItem('GPTJsSetting.zerrorCourseId', courseId);
+        if (folderId) localStorage.setItem('GPTJsSetting.zerrorFolderId', folderId);
+    }
     if (!token) {
         logger('📤 题库上传: 未登录ZError/在这学，缺少 zaizhexue_token', 'orange');
         return Promise.resolve();
     }
     if (!courseId || !folderId) {
-        logger('📤 题库上传: 未配置 zerrorCourseId/zerrorFolderId', 'orange');
+        logger('📤 题库上传: 未配置 courseId/folderId，请在浮窗设置里填写并保存配置', 'orange');
         return Promise.resolve();
     }
     var optionArr = [];
