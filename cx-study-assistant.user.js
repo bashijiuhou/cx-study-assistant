@@ -3666,13 +3666,21 @@ function clearQuestionBank() {
 // ZError/在这学登录集成：复用官网“验证码 + 轮询”登录逻辑
 var _zerrorPollingTimer = null;
 
+function zerrorGetDocument() {
+    try {
+        if (top && top.document) return top.document;
+    } catch (e) {}
+    return document;
+}
+
 function zerrorSafeJson(text) {
     try { return JSON.parse(text || '{}'); } catch (e) { return {}; }
 }
 
 function zerrorSetStatus(msg, color) {
     try {
-        var el = top.document.getElementById('zerrorLoginStatus') || document.getElementById('zerrorLoginStatus');
+        var doc = zerrorGetDocument();
+        var el = doc.getElementById('zerrorLoginStatus');
         if (el) {
             el.textContent = msg || '';
             el.style.color = _ne21LogColorMap[color] || color || 'rgba(15,23,42,.48)';
@@ -3780,7 +3788,8 @@ async function zerrorTriggerLoginCode() {
 
 function zerrorShowCode(code) {
     try {
-        var box = top.document.getElementById('zerrorLoginCodeBox') || document.getElementById('zerrorLoginCodeBox');
+        var doc = zerrorGetDocument();
+        var box = doc.getElementById('zerrorLoginCodeBox');
         if (box) {
             box.textContent = code;
             box.style.display = 'block';
@@ -3806,7 +3815,7 @@ function zerrorLogout() {
 }
 
 function initZErrorLoginUI() {
-    var doc = top.document || document;
+    var doc = zerrorGetDocument();
     var courseInput = doc.getElementById('GPTJsSetting.zerrorCourseId');
     var folderInput = doc.getElementById('GPTJsSetting.zerrorFolderId');
     if (courseInput) {
