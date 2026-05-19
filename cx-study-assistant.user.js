@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.12-qb
-// @version             3.2.12
+// @name                cx-study-assistant v3.2.13-qb
+// @version             3.2.13
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -3903,19 +3903,28 @@ function zerrorSetSelectOptions(selectEl, items, placeholder, selectedId) {
 
 function zerrorFetchJson(url, token) {
     return new Promise(function(resolve, reject) {
-        GM_xmlhttpRequest({
-            method: 'GET',
-            url: url,
-            headers: token ? { Authorization: token } : {},
-            timeout: 15000,
-            onload: function(response) {
-                var data = zerrorParseJson(response.responseText);
-                if (response.status >= 200 && response.status < 300) resolve(data);
-                else reject(new Error('HTTP ' + response.status + ' ' + String(response.responseText || '').substring(0, 120)));
-            },
-            onerror: function(err) { reject(new Error((err && err.error) || '网络失败')); },
-            ontimeout: function() { reject(new Error('超时')); }
-        });
+        try {
+            if (typeof GM_xmlhttpRequest !== 'function') {
+                reject(new Error('GM_xmlhttpRequest 不可用，请检查油猴授权'));
+                return;
+            }
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: url,
+                headers: token ? { Authorization: token, Accept: 'application/json, text/plain, */*' } : { Accept: 'application/json, text/plain, */*' },
+                timeout: 15000,
+                onload: function(response) {
+                    var data = zerrorParseJson(response.responseText);
+                    if (response.status >= 200 && response.status < 300) resolve(data);
+                    else reject(new Error('HTTP ' + response.status + ' ' + String(response.responseText || '').substring(0, 120)));
+                },
+                onerror: function(err) { reject(new Error((err && (err.error || err.message)) || '网络失败')); },
+                onabort: function() { reject(new Error('请求被取消')); },
+                ontimeout: function() { reject(new Error('超时')); }
+            });
+        } catch (e) {
+            reject(e);
+        }
     });
 }
 
@@ -3932,14 +3941,18 @@ function zerrorLoadCourses() {
         zerrorSetStatus('请先保存 ZError token', 'orange');
         return Promise.resolve();
     }
-    zerrorSetStatus('正在读取校园/课程...', 'gray');
+    zerrorSetStatus('正在读取校园...', 'gray');
     if (courseSelect) courseSelect.disabled = true;
     if (folderSelect) folderSelect.disabled = true;
+    var watchdog = setTimeout(function () {
+        zerrorSetStatus('读取课程仍在等待，可能被接口/CORS/油猴权限卡住；请稍等或重保存token后再试', 'orange');
+    }, 8000);
     return zerrorFetchCampus(token).then(function(campusInfo) {
         if (!campusInfo || !campusInfo.campus || !campusInfo.campus.ID) {
             throw new Error('未绑定校园，请先到 ZError 绑定校园');
         }
         localStorage.setItem('GPTJsSetting.zerrorCampusId', String(campusInfo.campus.ID));
+        zerrorSetStatus('校园已读取，正在读取课程...', 'gray');
         return zerrorFetchJson('https://campuses.zerror.cc/campus/' + encodeURIComponent(campusInfo.campus.ID) + '/courses', token);
     }).then(function(courses) {
         if (!Array.isArray(courses)) courses = [];
@@ -3949,8 +3962,9 @@ function zerrorLoadCourses() {
         var selected = courseSelect && courseSelect.value;
         if (selected) return zerrorLoadFolders(selected);
     }).catch(function(err) {
-        zerrorSetStatus('课程加载失败: ' + err.message, 'red');
+        zerrorSetStatus('课程加载失败: ' + (err && err.message ? err.message : String(err)), 'red');
     }).finally(function() {
+        clearTimeout(watchdog);
         if (courseSelect) courseSelect.disabled = false;
         if (folderSelect) folderSelect.disabled = false;
     });
@@ -4035,7 +4049,7 @@ function initZErrorLoginUI() {
     if (manualTokenInput) manualTokenInput.value = zerrorGetToken();
     if (saveTokenBtn) saveTokenBtn.addEventListener('click', function () { zerrorSaveManualToken(); zerrorLoadCourses(); });
     if (manualTokenInput) manualTokenInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { zerrorSaveManualToken(); zerrorLoadCourses(); } });
-    if (zerrorGetToken()) setTimeout(zerrorLoadCourses, 300);
+    // 不自动加载课程，避免页面打开后接口卡住；用户点击“加载课程”时再请求。
     if (loginBtn) loginBtn.addEventListener('click', zerrorTriggerLoginCode);
     if (checkBtn) checkBtn.addEventListener('click', zerrorCheckLogin);
     if (logoutBtn) logoutBtn.addEventListener('click', zerrorLogout);
