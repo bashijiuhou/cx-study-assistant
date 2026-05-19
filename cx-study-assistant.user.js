@@ -1,11 +1,12 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.0
-// @version             3.2.0
+// @name                cx-study-assistant v3.2.1-qb
+// @version             3.2.1
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
 // @tag                 自建API
 // @connect api.bashijiuhou.com
+// @connect api.zaizhexue.top
 // @run-at              document-end
 // @grant               unsafeWindow
 // @grant               GM_xmlhttpRequest
@@ -3650,6 +3651,7 @@ function zeQuery(title, options, type) {
 
 // Ze 题库上传
 function zeUpload(title, options, type, answer) {
+    logger('📤 题库上传: 开始', 'gray');
     return new Promise(function(resolve) {
         GM_xmlhttpRequest({
             method: 'POST',
@@ -3668,18 +3670,22 @@ function zeUpload(title, options, type, answer) {
             onload: function(response) {
                 try {
                     var res = JSON.parse(response.responseText);
-                    if (res.success || res.code === 0) {
+                    if (res.success || res.code === 0 || (res.data && res.data.code === 0)) {
                         logger('📤 题库上传: 成功', 'green');
                     } else {
-                        logger('📤 题库上传: 失败', 'orange');
+                        logger('📤 题库上传: 失败 HTTP ' + response.status + ' ' + (res.message || res.msg || JSON.stringify(res).substring(0, 80)), 'orange');
                     }
                 } catch (e) {
-                    logger('📤 题库上传: 响应解析失败', 'red');
+                    logger('📤 题库上传: 响应解析失败 HTTP ' + response.status + ' ' + String(response.responseText).substring(0, 120), 'red');
                 }
                 resolve();
             },
-            onerror: function() {
-                logger('📤 题库上传: 网络失败', 'red');
+            onerror: function(err) {
+                logger('📤 题库上传: 网络失败 ' + (err && err.error ? err.error : ''), 'red');
+                resolve();
+            },
+            ontimeout: function() {
+                logger('📤 题库上传: 超时', 'red');
                 resolve();
             }
         });
