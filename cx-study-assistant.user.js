@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.19-qb
-// @version             3.2.19
+// @name                cx-study-assistant v3.2.20-qb
+// @version             3.2.20
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -3780,16 +3780,32 @@ function zerrorStartPolling(code) {
     if (!code) return;
     zerrorSetStatus('已生成验证码，5秒轮询一次；请到公众号发送验证码', 'blue');
     _zerrorPollingTimer = setInterval(async function () {
-        var res = await zerrorRequest('POST', 'https://app.zaizhexue.top/polling', { verification_code: code });
-        if (res.data && res.data.logged_in === true) {
-            var parsed = zerrorParseLoginResponse(res.data);
-            if (parsed.token) {
-                zerrorStopPolling();
-                zerrorSaveLogin(parsed.token, parsed.user || {});
-                localStorage.removeItem('zerrorVerificationCode');
-                localStorage.removeItem('zerrorVerificationTimestamp');
-                zerrorSetStatus('登录成功，token已保存', 'green');
+        try {
+            // 完全照搬 ZError 题库上传脚本：fetch + JSON body，不走 GM_xmlhttpRequest，不额外加 Origin/Referer。
+            var response = await fetch('https://app.zaizhexue.top/polling', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ verification_code: code })
+            });
+            if (!response.ok) {
+                zerrorSetStatus('轮询失败 HTTP ' + response.status, 'orange');
+                return;
             }
+            var data = await response.json();
+            if (data && data.logged_in) {
+                var parsed = zerrorParseLoginResponse(data);
+                if (parsed.token) {
+                    zerrorStopPolling();
+                    zerrorSaveLogin(parsed.token, parsed.user || {});
+                    localStorage.removeItem('zerrorVerificationCode');
+                    localStorage.removeItem('zerrorVerificationTimestamp');
+                    zerrorSetStatus('登录成功，token已保存', 'green');
+                }
+            } else {
+                zerrorSetStatus('等待登录', 'blue');
+            }
+        } catch (error) {
+            zerrorSetStatus('轮询失败: ' + (error && error.message ? error.message : String(error)), 'orange');
         }
     }, 5000);
 }
@@ -3802,34 +3818,29 @@ async function zerrorTriggerLoginCode() {
         zerrorStartPolling(cachedCode);
         return;
     }
-    zerrorSetStatus('正在获取验证码...', 'gray');
-    var triggerHeaders = {
-        'Accept': 'application/json, text/plain, */*',
-        'Origin': 'https://tiku.zerror.cc',
-        'Referer': 'https://tiku.zerror.cc/'
-    };
-    // 官网 axios 是 POST 空 body；不要强塞 application/json，否则容易被 EdgeOne 拦截。
-    var attempts = [
-        ['POST', 'https://app.zaizhexue.top/trigger_login', null, triggerHeaders],
-        ['POST', 'https://app.zaizhexue.top/trigger_login', {}, triggerHeaders],
-        ['GET', 'https://app.zaizhexue.top/trigger_login', null, triggerHeaders]
-    ];
-    var res = null, code = '';
-    for (var i = 0; i < attempts.length; i++) {
-        res = await zerrorRequest(attempts[i][0], attempts[i][1], attempts[i][2], attempts[i][3]);
-        code = zerrorExtractVerificationCode(res.data, res.text);
-        if (code) break;
-        if (res.status === 404 || res.status === 405) continue;
-        if (res.status === 567) break;
-    }
-    if (code) {
+    zerrorSetStatus('请求验证码', 'gray');
+    try {
+        // 完全照搬 ZError 题库上传脚本的登录请求。
+        var response = await fetch('https://app.zaizhexue.top/trigger_login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        if (!response.ok) {
+            throw new Error('验证码请求失败 HTTP ' + response.status);
+        }
+        var data = await response.json();
+        var code = (data && data.verification_code) || '';
+        if (!code) {
+            throw new Error('响应里没有 verification_code');
+        }
         localStorage.setItem('zerrorVerificationCode', code);
         localStorage.setItem('zerrorVerificationTimestamp', String(Date.now()));
         zerrorShowCode(code);
+        zerrorSetStatus('验证码已获取', 'green');
         zerrorStartPolling(code);
-    } else {
-        var hint = res && res.status === 567 ? '被 ZError/腾讯 EdgeOne 防护拦截，建议打开 https://tiku.zerror.cc/login 登录后复制 token，或稍后重试。' : String((res && res.text) || '').substring(0, 80);
-        zerrorSetStatus('验证码获取失败 HTTP ' + (res ? res.status : 0) + ' ' + hint, 'red');
+    } catch (error) {
+        zerrorSetStatus('请求失败: ' + (error && error.message ? error.message : String(error)), 'red');
     }
 }
 
