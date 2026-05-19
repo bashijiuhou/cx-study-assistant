@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.18-qb
-// @version             3.2.18
+// @name                cx-study-assistant v3.2.19-qb
+// @version             3.2.19
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -9,7 +9,7 @@
 // @connect api.zaizhexue.top
 // @connect zaizhexue.top
 // @connect app.zaizhexue.top
-// @connect campuses.zerror.cc
+// @connect campus.zerror.cc
 // @connect tiku.zerror.cc
 // @run-at              document-end
 // @grant               unsafeWindow
@@ -3729,8 +3729,10 @@ function zerrorPick(obj, paths) {
 }
 
 function zerrorParseLoginResponse(data) {
+    // 官方 ZError 上传脚本登录成功后 token 在 user.token，
+    // 不是题库查询接口用的固定 Authorization token。这里按官方脚本原样优先读 user.token。
     var user = zerrorPick(data, ['data.user', 'user']) || null;
-    var token = zerrorPick(data, ['data.token', 'token', 'user.token', 'data.user.token']);
+    var token = zerrorPick(data, ['data.user.token', 'user.token', 'data.token', 'token']);
     return { user: user, token: token };
 }
 
@@ -3902,6 +3904,11 @@ function zerrorSetSelectOptions(selectEl, items, placeholder, selectedId) {
     if (selectedId) selectEl.value = String(selectedId);
 }
 
+function zerrorNormalizeUploadToken(token) {
+    token = String(token || '').trim();
+    return token.replace(/^Bearer\s+/i, '').trim();
+}
+
 function zerrorFetchJson(url, token) {
     return new Promise(function(resolve, reject) {
         var settled = false;
@@ -3924,7 +3931,8 @@ function zerrorFetchJson(url, token) {
             GM_xmlhttpRequest({
                 method: 'GET',
                 url: url,
-                headers: token ? { Authorization: token, Accept: 'application/json, text/plain, */*' } : { Accept: 'application/json, text/plain, */*' },
+                // 官方上传脚本调用 campus.zerror.cc 直接传 token，不加 Bearer。
+                headers: token ? { Authorization: zerrorNormalizeUploadToken(token), Accept: 'application/json, text/plain, */*' } : { Accept: 'application/json, text/plain, */*' },
                 timeout: 15000,
                 anonymous: false,
                 onload: function(response) {
@@ -3943,7 +3951,7 @@ function zerrorFetchJson(url, token) {
 }
 
 function zerrorFetchCampus(token) {
-    return zerrorFetchJson('https://campuses.zerror.cc/user/campus', token);
+    return zerrorFetchJson('https://campus.zerror.cc/user/campus', token);
 }
 
 function zerrorLoadCourses() {
@@ -3975,7 +3983,7 @@ function zerrorLoadCourses() {
     });
     return coursePromise.then(function(campusId) {
         zerrorSetStatus('校园已确定，正在读取课程...', 'gray');
-        return zerrorFetchJson('https://campuses.zerror.cc/campus/' + encodeURIComponent(campusId) + '/courses', token);
+        return zerrorFetchJson('https://campus.zerror.cc/campus/' + encodeURIComponent(campusId) + '/courses', token);
     }).then(function(courses) {
         if (!Array.isArray(courses)) courses = [];
         window.__zerrorCourses = courses;
@@ -3999,7 +4007,7 @@ function zerrorLoadFolders(courseId) {
     if (!token || !courseId) return Promise.resolve();
     zerrorSetStatus('正在读取文件夹...', 'gray');
     if (folderSelect) folderSelect.disabled = true;
-    return zerrorFetchJson('https://campuses.zerror.cc/courses/' + encodeURIComponent(courseId), token).then(function(data) {
+    return zerrorFetchJson('https://campus.zerror.cc/courses/' + encodeURIComponent(courseId), token).then(function(data) {
         var folders = data && Array.isArray(data.folders) ? data.folders : [];
         folders.sort(function(a, b) { return new Date(b.UpdatedAt || b.updatedAt || 0) - new Date(a.UpdatedAt || a.updatedAt || 0); });
         window.__zerrorFolders = folders;
@@ -4148,9 +4156,9 @@ function zeTypeToZErrorType(type) {
     return m[String(type)] || 'single_choice';
 }
 function zeAuthHeader(token) {
-    token = String(token || '').trim();
-    if (!token) return '';
-    return /^Bearer\s+/i.test(token) ? token : 'Bearer ' + token;
+    // 官方 ZError 上传脚本对 campus.zerror.cc 的 Authorization 直接传登录 token。
+    // 题库查询 api.zaizhexue.top 用的是另一套固定 Bearer token，两者不是一个。
+    return zerrorNormalizeUploadToken(token);
 }
 function zeUpload(title, options, type, answer) {
     var token = zerrorGetToken();
@@ -4208,7 +4216,7 @@ function zeUpload(title, options, type, answer) {
         }
         GM_xmlhttpRequest({
             method: 'POST',
-            url: 'https://campuses.zerror.cc/courses/' + encodeURIComponent(courseNum) + '/questions',
+            url: 'https://campus.zerror.cc/courses/' + encodeURIComponent(courseNum) + '/questions',
             headers: {
                 'Accept': 'application/json, text/plain, */*',
                 'Content-Type': 'application/json',
