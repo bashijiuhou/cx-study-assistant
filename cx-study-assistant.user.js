@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.2-qb
-// @version             3.2.2
+// @name                cx-study-assistant v3.2.3-qb
+// @version             3.2.3
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -3745,12 +3745,35 @@ async function getAnswer(_t, _q, retryCount = 0) {
 
     // === Ze 题库查询（仅限首次尝试）===
     var zePayload = buildZePayload(_t, _payload, _display);
+    var zeHitAnswer = null;
     if (retryCount === 0) {
         try {
             var zeRes = await zeQuery(zePayload.title, zePayload.options, zePayload.type);
             if (zeRes.hit) {
                 logger(_qPrefix + '📚 Ze题库命中: ' + zeRes.answer, 'green');
-                return zeRes.answer;
+                zeHitAnswer = zeRes.answer;
+                // 不直接 return，让后续逻辑判断是否需要 AI 补充
+                // 对选择题：如果 Ze 答案能在选项中匹配到，直接返回；否则继续 AI
+                if (String(_t) === '0' || String(_t) === '1' || String(_t) === '3') {
+                    // 选择/多选/判断题：尝试匹配选项
+                    var _optTexts = [];
+                    try {
+                        var _pObj = JSON.parse(_payload || '{}');
+                        if (Array.isArray(_pObj.options)) _optTexts = _pObj.options.map(function(o){return String(o||'').trim()});
+                    } catch(e){}
+                    if (_optTexts.length > 0) {
+                        var _bestIdx = findBestFuzzyMatch(_optTexts, zeHitAnswer, 0.4);
+                        if (_bestIdx >= 0) {
+                            return zeHitAnswer; // 匹配成功，直接用 Ze 答案
+                        }
+                        logger(_qPrefix + '📚 Ze答案与选项不匹配，回退AI答题', 'orange');
+                    } else {
+                        return zeHitAnswer; // 无选项时直接返回（判断题等）
+                    }
+                } else {
+                    // 填空/简答：直接返回 Ze 答案
+                    return zeHitAnswer;
+                }
             }
         } catch (e) {
             // Ze 查询出错，继续走 AI
