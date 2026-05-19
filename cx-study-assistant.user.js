@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.15-qb
-// @version             3.2.15
+// @name                cx-study-assistant v3.2.16-qb
+// @version             3.2.16
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -4167,12 +4167,17 @@ function zeUpload(title, options, type, answer) {
         return Promise.resolve();
     }
     if (!courseId || !folderId) {
-        logger('📤 题库上传: 未配置 courseId/folderId；可打开ZError官网，在校园题库URL/接口里复制对应ID后手填保存', 'orange');
+        logger('📤 题库上传: 未配置 courseId/folderId；注意 courseId 是课程ID数字，不是 campus/campusId', 'orange');
+        return Promise.resolve();
+    }
+    var courseNum = parseInt(courseId, 10);
+    if (!isFinite(courseNum) || String(courseId).trim() !== String(courseNum)) {
+        logger('📤 题库上传: courseId必须是课程ID数字，当前填的是“' + courseId + '”；不要填 campus 或 campusId', 'orange');
         return Promise.resolve();
     }
     var folderNum = parseInt(folderId, 10);
-    if (!isFinite(folderNum)) {
-        logger('📤 题库上传: folderId必须是数字', 'orange');
+    if (!isFinite(folderNum) || String(folderId).trim() !== String(folderNum)) {
+        logger('📤 题库上传: folderId必须是文件夹ID数字，当前填的是“' + folderId + '”', 'orange');
         return Promise.resolve();
     }
     var optionArr = [];
@@ -4186,7 +4191,7 @@ function zeUpload(title, options, type, answer) {
         add_to_top: false,
         question_bank_id: folderNum
     };
-    logger('📤 题库上传: 开始 course=' + courseId + ' folder=' + folderId, 'gray');
+    logger('📤 题库上传: 开始 course=' + courseNum + ' folder=' + folderNum, 'gray');
     return new Promise(function(resolve) {
         var settled = false;
         var hardTimer = setTimeout(function () {
@@ -4204,7 +4209,7 @@ function zeUpload(title, options, type, answer) {
         }
         GM_xmlhttpRequest({
             method: 'POST',
-            url: 'https://campuses.zerror.cc/courses/' + encodeURIComponent(courseId) + '/questions',
+            url: 'https://campuses.zerror.cc/courses/' + encodeURIComponent(courseNum) + '/questions',
             headers: {
                 'Accept': 'application/json, text/plain, */*',
                 'Content-Type': 'application/json',
@@ -4220,7 +4225,7 @@ function zeUpload(title, options, type, answer) {
                 } else if (response.status === 401 || response.status === 403) {
                     done('📤 题库上传: 鉴权失败 HTTP ' + response.status + '，请重新从ZError官网复制token', 'orange');
                 } else if (response.status === 404) {
-                    done('📤 题库上传: 404，请检查 courseId 是否正确', 'orange');
+                    done('📤 题库上传: 404，请检查 courseId 是否为课程ID数字，不是 campusId', 'orange');
                 } else if (response.status === 422 || response.status === 400) {
                     done('📤 题库上传: 参数错误 HTTP ' + response.status + '，请检查 folderId/题型 ' + body.substring(0, 120), 'orange');
                 } else {
