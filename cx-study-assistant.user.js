@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.9-qb
-// @version             3.2.9
+// @name                cx-study-assistant v3.2.10-qb
+// @version             3.2.10
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -449,7 +449,11 @@ function showBox() {
                         <p></p>
                         <label style="display:block;">
                             <span style="display:block;margin-bottom:6px;color:rgba(15,23,42,.78);">ZError/在这学题库上传</span>
-                            <span class="ne21-setting-tip">先点“获取验证码”，去 ZError 登录公众号发送验证码；成功后会自动保存 token。</span>
+                            <span class="ne21-setting-tip">推荐手动固定 token：先在 ZError 网页登录，再复制浏览器 localStorage.token 粘贴保存。验证码登录保留为备用。</span>
+                            <div class="ne21-mini-row">
+                                <input id="zerrorManualToken" class="ne21-input" type="password" placeholder="粘贴 ZError token / zaizhexue_token">
+                                <button type="button" id="zerrorSaveTokenBtn" class="ne21-btn ne21-btn-primary ne21-btn-small">保存token</button>
+                            </div>
                             <div class="ne21-mini-row">
                                 <button type="button" id="zerrorLoginBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">获取验证码</button>
                                 <button type="button" id="zerrorCheckLoginBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">检查登录</button>
@@ -3839,6 +3843,23 @@ function zerrorCheckLogin() {
     var token = zerrorGetToken();
     zerrorSetStatus(token ? '已登录，token=' + token.substring(0, 10) + '...' : '未登录，缺少 token', token ? 'green' : 'orange');
 }
+function zerrorSaveManualToken() {
+    var doc = zerrorGetDocument();
+    var input = doc.getElementById('zerrorManualToken');
+    var token = input ? String(input.value || '').trim() : '';
+    token = token.replace(/^Bearer\s+/i, '').trim();
+    if (!token) {
+        zerrorSetStatus('请先粘贴 token', 'orange');
+        return;
+    }
+    zerrorStopPolling();
+    zerrorSaveLogin(token, {});
+    localStorage.removeItem('zerrorVerificationCode');
+    localStorage.removeItem('zerrorVerificationTimestamp');
+    if (input) input.value = token;
+    zerrorSetStatus('手动 token 已保存，会固定使用直到清除或失效', 'green');
+}
+
 
 function zerrorLogout() {
     zerrorStopPolling();
@@ -3864,10 +3885,15 @@ function initZErrorLoginUI() {
         folderInput.value = localStorage.getItem('GPTJsSetting.zerrorFolderId') || '';
         folderInput.addEventListener('change', function () { localStorage.setItem('GPTJsSetting.zerrorFolderId', folderInput.value.trim()); });
     }
+    var manualTokenInput = doc.getElementById('zerrorManualToken');
+    var saveTokenBtn = doc.getElementById('zerrorSaveTokenBtn');
     var loginBtn = doc.getElementById('zerrorLoginBtn');
     var checkBtn = doc.getElementById('zerrorCheckLoginBtn');
     var logoutBtn = doc.getElementById('zerrorLogoutBtn');
     var codeBox = doc.getElementById('zerrorLoginCodeBox');
+    if (manualTokenInput) manualTokenInput.value = zerrorGetToken();
+    if (saveTokenBtn) saveTokenBtn.addEventListener('click', zerrorSaveManualToken);
+    if (manualTokenInput) manualTokenInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') zerrorSaveManualToken(); });
     if (loginBtn) loginBtn.addEventListener('click', zerrorTriggerLoginCode);
     if (checkBtn) checkBtn.addEventListener('click', zerrorCheckLogin);
     if (logoutBtn) logoutBtn.addEventListener('click', zerrorLogout);
