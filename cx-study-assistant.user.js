@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.16-qb
-// @version             3.2.16
+// @name                cx-study-assistant v3.2.17-qb
+// @version             3.2.17
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -4147,12 +4147,6 @@ function zeTypeToZErrorType(type) {
     };
     return m[String(type)] || 'single_choice';
 }
-function zeNormalizeToken(token) {
-    token = String(token || '').trim();
-    if (!token) return '';
-    return /^Bearer\s+/i.test(token) ? token : 'Bearer ' + token;
-}
-
 function zeUpload(title, options, type, answer) {
     var token = zerrorGetToken();
     var uiCfg = zerrorReadUploadConfigFromUI();
@@ -4213,7 +4207,7 @@ function zeUpload(title, options, type, answer) {
             headers: {
                 'Accept': 'application/json, text/plain, */*',
                 'Content-Type': 'application/json',
-                'Authorization': zeNormalizeToken(token)
+                'Authorization': String(token || '').replace(/^Bearer\s+/i, '').trim()
             },
             data: JSON.stringify(payload),
             timeout: 15000,
@@ -4223,7 +4217,7 @@ function zeUpload(title, options, type, answer) {
                 if (response.status >= 200 && response.status < 300) {
                     done('📤 题库上传: 成功', 'green');
                 } else if (response.status === 401 || response.status === 403) {
-                    done('📤 题库上传: 鉴权失败 HTTP ' + response.status + '，请重新从ZError官网复制token', 'orange');
+                    done('📤 题库上传: 鉴权失败 HTTP ' + response.status + '，请用ZError脚本内“获取验证码”重新授权，或从官网复制localStorage.token（不要复制Bearer前缀）', 'orange');
                 } else if (response.status === 404) {
                     done('📤 题库上传: 404，请检查 courseId 是否为课程ID数字，不是 campusId', 'orange');
                 } else if (response.status === 422 || response.status === 400) {
