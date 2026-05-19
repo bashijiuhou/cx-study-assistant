@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.13-qb
-// @version             3.2.13
+// @name                cx-study-assistant v3.2.14-qb
+// @version             3.2.14
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -460,7 +460,8 @@ function showBox() {
                                 <button type="button" id="zerrorLogoutBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">清除</button>
                             </div>
                             <div id="zerrorLoginCodeBox" class="ne21-code-box" style="display:none;" title="点击复制验证码"></div>
-                            <div class="ne21-mini-row"><select id="zerrorCourseSelect" class="ne21-select" style="flex:1;"><option value="">选择课程</option></select><button type="button" id="zerrorLoadCoursesBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">加载课程</button></div>
+                            <div class="ne21-mini-row"><input id="GPTJsSetting.zerrorCampusId" class="ne21-input" placeholder="campusId(可选)"><button type="button" id="zerrorLoadCoursesBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">加载课程</button></div>
+                            <div class="ne21-mini-row"><select id="zerrorCourseSelect" class="ne21-select" style="flex:1;"><option value="">选择课程</option></select></div>
                             <div class="ne21-mini-row"><select id="zerrorFolderSelect" class="ne21-select" style="flex:1;"><option value="">选择文件夹</option></select></div>
                             <div class="ne21-mini-row"><input id="GPTJsSetting.zerrorCourseId" class="ne21-input" placeholder="courseId"><input id="GPTJsSetting.zerrorFolderId" class="ne21-input" placeholder="folderId"><button type="button" id="zerrorSaveConfigBtn" class="ne21-btn ne21-btn-secondary ne21-btn-small">保存配置</button></div>
                             <span id="zerrorLoginStatus" class="ne21-setting-tip"></span>
@@ -3903,9 +3904,21 @@ function zerrorSetSelectOptions(selectEl, items, placeholder, selectedId) {
 
 function zerrorFetchJson(url, token) {
     return new Promise(function(resolve, reject) {
+        var settled = false;
+        var hardTimer = setTimeout(function () {
+            if (settled) return;
+            settled = true;
+            reject(new Error('硬超时：油猴请求无回调'));
+        }, 20000);
+        function done(fn, value) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(hardTimer);
+            fn(value);
+        }
         try {
             if (typeof GM_xmlhttpRequest !== 'function') {
-                reject(new Error('GM_xmlhttpRequest 不可用，请检查油猴授权'));
+                done(reject, new Error('GM_xmlhttpRequest 不可用，请检查油猴授权'));
                 return;
             }
             GM_xmlhttpRequest({
@@ -3913,17 +3926,18 @@ function zerrorFetchJson(url, token) {
                 url: url,
                 headers: token ? { Authorization: token, Accept: 'application/json, text/plain, */*' } : { Accept: 'application/json, text/plain, */*' },
                 timeout: 15000,
+                anonymous: false,
                 onload: function(response) {
                     var data = zerrorParseJson(response.responseText);
-                    if (response.status >= 200 && response.status < 300) resolve(data);
-                    else reject(new Error('HTTP ' + response.status + ' ' + String(response.responseText || '').substring(0, 120)));
+                    if (response.status >= 200 && response.status < 300) done(resolve, data);
+                    else done(reject, new Error('HTTP ' + response.status + ' ' + String(response.responseText || '').substring(0, 120)));
                 },
-                onerror: function(err) { reject(new Error((err && (err.error || err.message)) || '网络失败')); },
-                onabort: function() { reject(new Error('请求被取消')); },
-                ontimeout: function() { reject(new Error('超时')); }
+                onerror: function(err) { done(reject, new Error((err && (err.error || err.message)) || '网络失败')); },
+                onabort: function() { done(reject, new Error('请求被取消')); },
+                ontimeout: function() { done(reject, new Error('超时')); }
             });
         } catch (e) {
-            reject(e);
+            done(reject, e);
         }
     });
 }
@@ -3935,25 +3949,33 @@ function zerrorFetchCampus(token) {
 function zerrorLoadCourses() {
     var token = zerrorGetToken();
     var doc = zerrorGetDocument();
+    var campusInput = doc.getElementById('GPTJsSetting.zerrorCampusId');
     var courseSelect = doc.getElementById('zerrorCourseSelect');
     var folderSelect = doc.getElementById('zerrorFolderSelect');
     if (!token) {
         zerrorSetStatus('请先保存 ZError token', 'orange');
         return Promise.resolve();
     }
-    zerrorSetStatus('正在读取校园...', 'gray');
+    var manualCampusId = campusInput ? String(campusInput.value || '').trim() : '';
+    if (manualCampusId) localStorage.setItem('GPTJsSetting.zerrorCampusId', manualCampusId);
+    zerrorSetStatus(manualCampusId ? '使用手动 campusId，正在读取课程...' : '正在读取校园...', 'gray');
     if (courseSelect) courseSelect.disabled = true;
     if (folderSelect) folderSelect.disabled = true;
     var watchdog = setTimeout(function () {
-        zerrorSetStatus('读取课程仍在等待，可能被接口/CORS/油猴权限卡住；请稍等或重保存token后再试', 'orange');
+        zerrorSetStatus('读取校园仍在等待；若继续卡住，请手动填 campusId 后点加载课程', 'orange');
     }, 8000);
-    return zerrorFetchCampus(token).then(function(campusInfo) {
+    var coursePromise = manualCampusId ? Promise.resolve(manualCampusId) : zerrorFetchCampus(token).then(function(campusInfo) {
         if (!campusInfo || !campusInfo.campus || !campusInfo.campus.ID) {
-            throw new Error('未绑定校园，请先到 ZError 绑定校园');
+            throw new Error('未绑定校园，请先到 ZError 绑定校园；也可手动填写 campusId');
         }
-        localStorage.setItem('GPTJsSetting.zerrorCampusId', String(campusInfo.campus.ID));
-        zerrorSetStatus('校园已读取，正在读取课程...', 'gray');
-        return zerrorFetchJson('https://campuses.zerror.cc/campus/' + encodeURIComponent(campusInfo.campus.ID) + '/courses', token);
+        var campusId = String(campusInfo.campus.ID);
+        localStorage.setItem('GPTJsSetting.zerrorCampusId', campusId);
+        if (campusInput) campusInput.value = campusId;
+        return campusId;
+    });
+    return coursePromise.then(function(campusId) {
+        zerrorSetStatus('校园已确定，正在读取课程...', 'gray');
+        return zerrorFetchJson('https://campuses.zerror.cc/campus/' + encodeURIComponent(campusId) + '/courses', token);
     }).then(function(courses) {
         if (!Array.isArray(courses)) courses = [];
         window.__zerrorCourses = courses;
@@ -4014,6 +4036,11 @@ function initZErrorLoginUI() {
     if (folderInput) {
         folderInput.value = localStorage.getItem('GPTJsSetting.zerrorFolderId') || '';
         folderInput.addEventListener('change', function () { localStorage.setItem('GPTJsSetting.zerrorFolderId', folderInput.value.trim()); });
+    }
+    var campusInput = doc.getElementById('GPTJsSetting.zerrorCampusId');
+    if (campusInput) {
+        campusInput.value = localStorage.getItem('GPTJsSetting.zerrorCampusId') || '';
+        campusInput.addEventListener('input', function () { localStorage.setItem('GPTJsSetting.zerrorCampusId', campusInput.value.trim()); });
     }
     var courseSelect = doc.getElementById('zerrorCourseSelect');
     var folderSelect = doc.getElementById('zerrorFolderSelect');
