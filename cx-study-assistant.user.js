@@ -15,6 +15,8 @@
 // @grant               GM_getResourceText
 // @icon https://api.bashijiuhou.com/logo.png
 // @homepage            https://github.com/bashijiuhou/cx-study-assistant
+// @updateURL           https://raw.githubusercontent.com/bashijiuhou/cx-study-assistant/feature/question-bank/cx-study-assistant.user.js
+// @downloadURL         https://raw.githubusercontent.com/bashijiuhou/cx-study-assistant/feature/question-bank/cx-study-assistant.user.js
 // ==/UserScript==
 
 
