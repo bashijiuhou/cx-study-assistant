@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.3-qb
-// @version             3.2.3
+// @name                cx-study-assistant v3.2.4-qb
+// @version             3.2.4
 // @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -600,6 +600,7 @@ function showBox() {
                 <button class="ne21-btn ne21-btn-primary">充值</button>
             </a>
             <select id="modelSelect">
+                <option value="deepseek-default">DeepSeek Default (默认)</option>
                 <option value="deepseek-ai/deepseek-v4-flash">DeepSeek V4 Flash (推荐 ⚡)</option>
                 <option value="deepseek-ai/deepseek-v4-pro">DeepSeek V4 Pro (高质量 🎯)</option>
                 <option value="moonshotai/kimi-k2.6">Kimi K2.6 (长文本)</option>
@@ -614,7 +615,6 @@ function showBox() {
     // 同步恢复上次选中的模型，避免等 window.onload 造成的闪烁
     // 旧模型名映射（向后兼容）
     var _modelCompat = {
-        'deepseek-default': 'deepseek-ai/deepseek-v4-flash',
         'deepseek-expert': 'deepseek-ai/deepseek-v4-pro',
         'deepseek-reasoner': 'moonshotai/kimi-k2.6'
     };
@@ -3818,7 +3818,7 @@ async function getAnswer(_t, _q, retryCount = 0) {
         }
 
         // 旧模型名映射（向后兼容）
-        var _modelCompat = { 'deepseek-default': 'deepseek-ai/deepseek-v4-flash', 'deepseek-expert': 'deepseek-ai/deepseek-v4-pro', 'deepseek-reasoner': 'moonshotai/kimi-k2.6' };
+        var _modelCompat = { 'deepseek-expert': 'deepseek-ai/deepseek-v4-pro', 'deepseek-reasoner': 'moonshotai/kimi-k2.6' };
         let _model = localStorage.getItem('GPTJsSetting.model') || _defaultModel;
         _model = _modelCompat[_model] || _model;
         let questionTypeLabels = { '0': '单选题', '1': '多选题', '2': '填空题', '3': '判断题', '4': '简答题' };
