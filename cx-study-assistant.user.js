@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name cx-study-assistant v3.2.29-qb
-// @version 3.2.29
+// @name cx-study-assistant v3.2.30-qb
+// @version 3.2.30
 // @description 自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -51,8 +51,8 @@ var setting = {
  phone: '', // 登录配置项：登录手机号/超星号
  password: '', // 登录配置项：登录密码
 
- apiKey: '', // AI 搜题 API Key（必填）
- tikuToken: '' // 自建题库 Token（必填）
+ apiKey: '', // AI 搜题 API Key（必填，用户自己的 key）
+ tikuToken: 'tiku-self-2026' // 自建题库 Token（内置，无需填写）
 }
 
 
@@ -69,7 +69,7 @@ var _w = unsafeWindow,
 var _host = "https://api.bashijiuhou.com";
 var _apiKey = localStorage.getItem('GPTJsSetting.apiKey') || setting.apiKey || "";
 var _defaultModel = "deepseek-ai/deepseek-v4-flash";
-var _tikuToken = localStorage.getItem('GPTJsSetting.tikuToken') || setting.tikuToken || "";
+var _tikuToken = localStorage.getItem('GPTJsSetting.tikuToken') || setting.tikuToken || "tiku-self-2026";
 
 
 
@@ -447,9 +447,6 @@ function showBox() {
  <label title="AI 搜题使用的 API Key，需填写后才能调用 AI 答题" style="display:flex;align-items:center;gap:6px;">
  <input type="password" id="GPTJsSetting.apiKey" class="ne21-select" style="min-width:180px;width:180px;padding:5px 8px;font-size:12px;" placeholder="必填：sk-...">AI API Key
  </label>
- <label title="自建题库认证 Token，需填写后才能查询/写入题库" style="display:flex;align-items:center;gap:6px;">
- <input type="password" id="GPTJsSetting.tikuToken" class="ne21-select" style="min-width:180px;width:180px;padding:5px 8px;font-size:12px;" placeholder="必填：题库 Token">题库 Token
- </label>
  <p></p>
  <div style="font-size:11px;color:rgba(15,23,42,.48);line-height:1.5;margin-bottom:6px;">若发现AI答题或题库答案有误，可点击下方按钮进入管理后台修正答案</div>
  <a href="http://106.14.39.185:9000/admin" target="_blank" style="display:inline-block;padding:8px 16px;background:#0ea5e9;color:#fff;border-radius:6px;font-size:13px;text-decoration:none;font-weight:500;">📚 题库管理后台</a>
@@ -607,17 +604,6 @@ function showBox() {
  var v = apiKeyInput.value.trim();
  localStorage.setItem('GPTJsSetting.apiKey', v);
  _apiKey = v || setting.apiKey || '';
- });
- }
- // 题库 Token 输入框
- var tikuTokenInput = panelDoc.getElementById('GPTJsSetting.tikuToken');
- if (tikuTokenInput) {
- var savedToken = localStorage.getItem('GPTJsSetting.tikuToken');
- if (savedToken) tikuTokenInput.value = savedToken;
- tikuTokenInput.addEventListener('change', function () {
- var v = tikuTokenInput.value.trim();
- localStorage.setItem('GPTJsSetting.tikuToken', v);
- _tikuToken = v || setting.tikuToken || '';
  });
  }
 
