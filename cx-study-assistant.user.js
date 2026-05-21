@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name cx-study-assistant v3.2.27-qb
-// @version 3.2.27
+// @name cx-study-assistant v3.2.28-qb
+// @version 3.2.28
 // @description 自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -47,9 +47,12 @@ var setting = {
     goodStudent: 1,  // 好学生模式,不自动选择答案,仅将单选题和多选题的ABCD加粗
     alterTitle: 1,  //修改题目,将AI回复的答案插入题目中,不建议关闭,AI回复不能完全匹配答案,题目显示答案供手动选择
 
-    autoLogin: 0,   // 自动登录，0为关闭，1为开启，开启此功能请配置登陆配置项
-    phone: '',      // 登录配置项：登录手机号/超星号
-    password: ''    // 登录配置项：登录密码
+ autoLogin: 0, // 自动登录，0为关闭，1为开启，开启此功能请配置登陆配置项
+ phone: '', // 登录配置项：登录手机号/超星号
+ password: '', // 登录配置项：登录密码
+
+ apiKey: 'sk-1Pk...9Rkv', // AI 搜题 API Key
+ tikuToken: 'tiku-self-2026' // 自建题库 Token
 }
 
 
@@ -64,8 +67,9 @@ var _w = unsafeWindow,
 // 多域名候选及自动测速选择
 // API 配置 — 使用自建 New-API
 var _host = "https://api.bashijiuhou.com";
-var _apiKey = "sk-1Pkx8xT2qbnjMVjGOa5RRNroihdd45g2FndkhoVfR4Vi9Rkv";
+var _apiKey = localStorage.getItem('GPTJsSetting.apiKey') || setting.apiKey || "sk-1Pk...9Rkv";
 var _defaultModel = "deepseek-ai/deepseek-v4-flash";
+var _tikuToken = localStorage.getItem('GPTJsSetting.tikuToken') || setting.tikuToken || "tiku-self-2026";
 
 
 
@@ -440,6 +444,13 @@ function showBox() {
  <label><input type="checkbox" id="GPTJsSetting.redo">重做模式 (不跳过已答题)</label>
  <label><input type="checkbox" id="GPTJsSetting.fuzzyMatch" checked>相似度匹配 (答案模糊匹配)</label>
  <p></p>
+ <label title="AI 搜题使用的 API Key，留空则使用默认值" style="display:flex;align-items:center;gap:6px;">
+ <input type="password" id="GPTJsSetting.apiKey" class="ne21-select" style="min-width:180px;width:180px;padding:5px 8px;font-size:12px;" placeholder="sk-...">AI API Key
+ </label>
+ <label title="自建题库认证 Token，留空则使用默认值" style="display:flex;align-items:center;gap:6px;">
+ <input type="password" id="GPTJsSetting.tikuToken" class="ne21-select" style="min-width:180px;width:180px;padding:5px 8px;font-size:12px;" placeholder="题库 Token">题库 Token
+ </label>
+ <p></p>
  <div style="font-size:11px;color:rgba(15,23,42,.48);line-height:1.5;margin-bottom:6px;">若发现AI答题或题库答案有误，可点击下方按钮进入管理后台修正答案</div>
  <a href="http://106.14.39.185:9000/admin" target="_blank" style="display:inline-block;padding:8px 16px;background:#0ea5e9;color:#fff;border-radius:6px;font-size:13px;text-decoration:none;font-weight:500;">📚 题库管理后台</a>
  </div>
@@ -578,16 +589,39 @@ function showBox() {
                 reqIntervalInput.value = (savedInterval !== null && isFinite(parseInt(savedInterval, 10)))
                     ? savedInterval
                     : String(setting.reqIntervalTime || 0);
-                reqIntervalInput.addEventListener('change', function () {
-                    var v = parseInt(reqIntervalInput.value, 10);
-                    if (!isFinite(v) || v < 0) v = 0;
-                    if (v > 60) v = 60;
-                    reqIntervalInput.value = String(v);
-                    localStorage.setItem('GPTJsSetting.reqIntervalTime', String(v));
-                });
-            }
+ reqIntervalInput.addEventListener('change', function () {
+ var v = parseInt(reqIntervalInput.value, 10);
+ if (!isFinite(v) || v < 0) v = 0;
+ if (v > 60) v = 60;
+ reqIntervalInput.value = String(v);
+ localStorage.setItem('GPTJsSetting.reqIntervalTime', String(v));
+ });
+ }
 
-        })();
+ // API Key 输入框：恢复并持久化，修改后实时更新全局变量
+ var apiKeyInput = panelDoc.getElementById('GPTJsSetting.apiKey');
+ if (apiKeyInput) {
+ var savedKey = localStorage.getItem('GPTJsSetting.apiKey');
+ if (savedKey) apiKeyInput.value = savedKey;
+ apiKeyInput.addEventListener('change', function () {
+ var v = apiKeyInput.value.trim();
+ localStorage.setItem('GPTJsSetting.apiKey', v);
+ _apiKey = v || setting.apiKey || 'sk-1Pk...9Rkv';
+ });
+ }
+ // 题库 Token 输入框
+ var tikuTokenInput = panelDoc.getElementById('GPTJsSetting.tikuToken');
+ if (tikuTokenInput) {
+ var savedToken = localStorage.getItem('GPTJsSetting.tikuToken');
+ if (savedToken) tikuTokenInput.value = savedToken;
+ tikuTokenInput.addEventListener('change', function () {
+ var v = tikuTokenInput.value.trim();
+ localStorage.setItem('GPTJsSetting.tikuToken', v);
+ _tikuToken = v || setting.tikuToken || 'tiku-self-2026';
+ });
+ }
+
+ })();
     } else {
         $('#ne-21log', zerrorGetDocument()).html('')
     }
@@ -3652,7 +3686,7 @@ function zeQuery(title, options, type) {
  url: 'http://106.14.39.185:9000/api/query',
  headers: {
  'Content-Type': 'application/json',
- 'Authorization': 'Bearer tiku-self-2026'
+ 'Authorization': 'Bearer ' + _tikuToken
  },
  data: JSON.stringify({
  title: title || '',
@@ -3700,7 +3734,7 @@ function tikuSaveAnswer(title, options, type, answer, confidence) {
  url: 'http://106.14.39.185:9000/api/upsert',
  headers: {
  'Content-Type': 'application/json',
- 'Authorization': 'Bearer tiku-self-2026'
+ 'Authorization': 'Bearer ' + _tikuToken
  },
  data: JSON.stringify({
  title: title || '',
