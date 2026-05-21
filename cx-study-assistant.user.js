@@ -453,6 +453,7 @@ function showBox() {
  <label><input type="checkbox" id="GPTJsSetting.redo">重做模式 (不跳过已答题)</label>
  <label><input type="checkbox" id="GPTJsSetting.fuzzyMatch" checked>相似度匹配 (答案模糊匹配)</label>
  <p></p>
+ <div style="font-size:11px;color:rgba(15,23,42,.48);line-height:1.5;margin-bottom:6px;">若发现AI答题或题库答案有误，可点击下方按钮进入管理后台修正答案</div>
  <a href="http://106.14.39.185:9000/admin" target="_blank" style="display:inline-block;padding:8px 16px;background:#0ea5e9;color:#fff;border-radius:6px;font-size:13px;text-decoration:none;font-weight:500;">📚 题库管理后台</a>
  </div>
                     <div id="ne-21thinking">
