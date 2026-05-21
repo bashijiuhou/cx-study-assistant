@@ -1,13 +1,12 @@
 // ==UserScript==
-// @name                cx-study-assistant v3.2.22-qb
-// @version             3.2.22
-// @description         自建API版 - 使用 api.bashijiuhou.com New-API后端，原作者:Ne-21
+// @name cx-study-assistant v3.2.23-qb
+// @version 3.2.23
+// @description 自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
 // @tag                 自建API
 // @connect api.bashijiuhou.com
-// @connect api.zaizhexue.top
-// @connect zaizhexue.top
+// @connect 106.14.39.185
 // @run-at              document-end
 // @grant               unsafeWindow
 // @grant               GM_xmlhttpRequest
@@ -3539,7 +3538,7 @@ function buildPrompt(opts) {
 // AIç­æ¡åå¤çï¼å»é¤å¼å¯¼è¯­ãåºå·ãæ ç¹åç¼ç­
 
 
-// 从 buildPrompt 的 JSON payload 中提取 ZE 题库需要的 title/options/type
+// 从 buildPrompt 的 JSON payload 中提取题库需要的 title/options/type
 function buildZePayload(_t, _payload, _display) {
     var title = _display || _payload || '';
     var options = '';
@@ -3657,46 +3656,74 @@ function zerrorGetDocument() {
 }
 
 function zeQuery(title, options, type) {
-    return new Promise(function(resolve) {
-        GM_xmlhttpRequest({
-            method: 'POST',
-            url: 'https://api.zaizhexue.top/api/query',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer 0906281b2abb21e4a36dbeb8a0da90b6e40747532ae098c7f0062c45ec3ec5c3241066e98fbbeced58cb35985ac28ea7650a5784b611fd'
-            },
-            data: JSON.stringify({
-                title: title || '',
-                options: options || '',
-                type: type
-            }),
-            timeout: 8000,
-            onload: function(response) {
-                try {
-                    var res = JSON.parse(response.responseText);
-                    var payload = res.data || res;
-                    // 学 OCS 的 handler 思路：返回 [question, answer, extra]
-                    // 这里 msg 多数是提示/题干，不能当答案；只认 data/answer。
-                    var answer = undefined;
-                    if (payload) {
-                        if (typeof payload.data === 'string' && payload.data.trim()) answer = payload.data.trim();
-                        else if (Array.isArray(payload.data) && payload.data.length) answer = payload.data.join('|');
-                        else if (payload.data && typeof payload.data.answer === 'string' && payload.data.answer.trim()) answer = payload.data.answer.trim();
-                        else if (payload.answer && String(payload.answer).trim()) answer = String(payload.answer).trim();
-                    }
-                    if (answer && !/解析失败|请求体|未找到|不存在|error|错误/i.test(answer)) {
-                        resolve({hit: true, answer: answer});
-                    } else {
-                        resolve({hit: false, msg: payload && payload.msg ? payload.msg : ''});
-                    }
-                } catch (e) {
-                    resolve({hit: false, msg: '响应解析失败'});
-                }
-            },
-            onerror: function() { resolve({hit: false, msg: '网络失败'}); },
-            ontimeout: function() { resolve({hit: false, msg: '超时'}); }
-        });
-    });
+ return new Promise(function(resolve) {
+ GM_xmlhttpRequest({
+ method: 'POST',
+ url: 'http://106.14.39.185:9000/api/query',
+ headers: {
+ 'Content-Type': 'application/json',
+ 'Authorization': 'Bearer tiku-self-2026'
+ },
+ data: JSON.stringify({
+ title: title || '',
+ options: options || '',
+ type: type
+ }),
+ timeout: 8000,
+ onload: function(response) {
+ try {
+ var res = JSON.parse(response.responseText);
+ if (res.code === 0 && res.data) {
+ var answer = res.data;
+ if (typeof answer === 'object') {
+ if (typeof answer.data === 'string' && answer.data.trim()) answer = answer.data.trim();
+ else if (Array.isArray(answer.data) && answer.data.length) answer = answer.data.join('|');
+ else if (answer.answer && String(answer.answer).trim()) answer = String(answer.answer).trim();
+ else answer = JSON.stringify(answer);
+ }
+ if (typeof answer === 'string') answer = answer.trim();
+ if (answer && !/解析失败|请求体|未找到|不存在|error|错误/i.test(answer)) {
+ resolve({hit: true, answer: answer});
+ } else {
+ resolve({hit: false, msg: '未找到答案'});
+ }
+ } else {
+ resolve({hit: false, msg: res.msg || '未找到答案'});
+ }
+ } catch (e) {
+ resolve({hit: false, msg: '响应解析失败'});
+ }
+ },
+ onerror: function() { resolve({hit: false, msg: '网络失败'}); },
+ ontimeout: function() { resolve({hit: false, msg: '超时'}); }
+ });
+ });
+}
+
+// 将答案回写到自建题库
+function tikuSaveAnswer(title, options, type, answer) {
+ try {
+ GM_xmlhttpRequest({
+ method: 'POST',
+ url: 'http://106.14.39.185:9000/api/upsert',
+ headers: {
+ 'Content-Type': 'application/json',
+ 'Authorization': 'Bearer tiku-self-2026'
+ },
+ data: JSON.stringify({
+ title: title || '',
+ options: options || '',
+ type: type,
+ answer: answer,
+ confidence: 'model',
+ platform: 'chaoxing'
+ }),
+ timeout: 5000,
+ onload: function() {},
+ onerror: function() {},
+ ontimeout: function() {}
+ });
+ } catch(e) {}
 }
 
 
@@ -3720,14 +3747,14 @@ async function getAnswer(_t, _q, retryCount = 0) {
     }
     logger(_qPrefix + '题目:' + _display, 'pink')
 
-    // === Ze 题库查询（仅限首次尝试）===
-    var zePayload = buildZePayload(_t, _payload, _display);
-    var zeHitAnswer = null;
-    if (retryCount === 0) {
-        try {
-            var zeRes = await zeQuery(zePayload.title, zePayload.options, zePayload.type);
-            if (zeRes.hit) {
-                logger(_qPrefix + '📚 Ze题库命中: ' + zeRes.answer, 'green');
+ // === 自建题库查询（仅限首次尝试）===
+ var zePayload = buildZePayload(_t, _payload, _display);
+ var zeHitAnswer = null;
+ if (retryCount === 0) {
+ try {
+ var zeRes = await zeQuery(zePayload.title, zePayload.options, zePayload.type);
+ if (zeRes.hit) {
+ logger(_qPrefix + '📚 自建题库命中: ' + zeRes.answer, 'green');
                 zeHitAnswer = zeRes.answer;
                 // 不直接 return，让后续逻辑判断是否需要 AI 补充
                 // 对选择题：如果 Ze 答案能在选项中匹配到，直接返回；否则继续 AI
@@ -3743,7 +3770,7 @@ async function getAnswer(_t, _q, retryCount = 0) {
                         if (_bestIdx >= 0) {
                             return zeHitAnswer; // 匹配成功，直接用 Ze 答案
                         }
-                        logger(_qPrefix + '📚 Ze答案与选项不匹配，回退AI答题', 'orange');
+                        logger(_qPrefix + '📚 自建题库答案与选项不匹配，回退AI答题', 'orange');
                     } else {
                         return zeHitAnswer; // 无选项时直接返回（判断题等）
                     }
@@ -3852,9 +3879,13 @@ async function getAnswer(_t, _q, retryCount = 0) {
                     try {
                         var _answer = obj.choices[0].message.content.trim();
                         _answer = cleanupAiAnswer(_t, _answer, _payload);
-                        if (_answer) {
-                            updateLogEntry($thinkingLog, "答案:" + _answer, 'purple')
-                            resolve(_answer)
+ if (_answer) {
+ updateLogEntry($thinkingLog, "答案:" + _answer, 'purple')
+ // AI 答题成功，回写到自建题库
+ if (zePayload && zePayload.title) {
+ tikuSaveAnswer(zePayload.title, zePayload.options, zePayload.type, _answer);
+ }
+ resolve(_answer)
                         } else {
                             updateLogEntry($thinkingLog, 'AI返回空答案', 'red')
                             localStorage.setItem('GPTJsSetting.sub', false)
