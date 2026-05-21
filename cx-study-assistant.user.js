@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name cx-study-assistant v3.2.23-qb
-// @version 3.2.23
+// @name cx-study-assistant v3.2.24-qb
+// @version 3.2.24
 // @description 自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -3701,7 +3701,7 @@ function zeQuery(title, options, type) {
 }
 
 // 将答案回写到自建题库
-function tikuSaveAnswer(title, options, type, answer) {
+function tikuSaveAnswer(title, options, type, answer, confidence) {
  try {
  GM_xmlhttpRequest({
  method: 'POST',
@@ -3715,7 +3715,7 @@ function tikuSaveAnswer(title, options, type, answer) {
  options: options || '',
  type: type,
  answer: answer,
- confidence: 'model',
+ confidence: confidence || 'model',
  platform: 'chaoxing'
  }),
  timeout: 5000,
@@ -3755,7 +3755,25 @@ async function getAnswer(_t, _q, retryCount = 0) {
  var zeRes = await zeQuery(zePayload.title, zePayload.options, zePayload.type);
  if (zeRes.hit) {
  logger(_qPrefix + '📚 自建题库命中: ' + zeRes.answer, 'green');
-                zeHitAnswer = zeRes.answer;
+ // 添加修正按钮
+ try {
+ var _fixBtn = document.createElement('a');
+ _fixBtn.textContent = ' ✏️修正';
+ _fixBtn.style.cssText = 'color:#f59e0b;cursor:pointer;font-size:12px;text-decoration:underline;vertical-align:middle;';
+ _fixBtn.title = '修正此题答案';
+ (function(_t2, _op2, _tp2, _ans2){
+ _fixBtn.addEventListener('click', function() {
+ var newAns = prompt('修正答案（当前: ' + _ans2 + '）:', _ans2);
+ if (newAns !== null && newAns.trim() && newAns.trim() !== _ans2) {
+ tikuSaveAnswer(_t2, _op2, _tp2, newAns.trim(), 'human');
+ logger(_qPrefix + '✅ 答案已修正为: ' + newAns.trim(), 'green');
+ }
+ });
+ })(zePayload.title, zePayload.options, zePayload.type, zeRes.answer);
+ var _logs = document.querySelectorAll('.ne21-log-entry');
+ if (_logs.length) _logs[_logs.length-1].appendChild(_fixBtn);
+ } catch(e){}
+ zeHitAnswer = zeRes.answer;
                 // 不直接 return，让后续逻辑判断是否需要 AI 补充
                 // 对选择题：如果 Ze 答案能在选项中匹配到，直接返回；否则继续 AI
                 if (String(_t) === '0' || String(_t) === '1' || String(_t) === '3') {
