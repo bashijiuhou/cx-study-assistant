@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name cx-study-assistant v3.2.26-qb
-// @version 3.2.26
-// @description 自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库，原作者:Ne-21
+// @name cx-study-assistant v3.2.27-qb
+// @version 3.2.27
+// @description 自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
 // @tag                 自建API
