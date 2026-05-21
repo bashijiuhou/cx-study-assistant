@@ -3685,6 +3685,8 @@ function zeQuery(title, options, type) {
  else answer = JSON.stringify(answer);
  }
  if (typeof answer === 'string') answer = answer.trim();
+ // 统一多选分隔符：| → #
+ answer = answer.replace(/\s*\|\s*/g, '#');
  if (answer && !/解析失败|请求体|未找到|不存在|error|错误/i.test(answer)) {
  resolve({hit: true, answer: answer});
  } else {
