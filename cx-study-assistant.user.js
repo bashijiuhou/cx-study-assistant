@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name cx-study-assistant v3.2.24-qb
-// @version 3.2.24
+// @name cx-study-assistant v3.2.25-qb
+// @version 3.2.25
 // @description 自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库，原作者:Ne-21
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -450,9 +450,11 @@ function showBox() {
                         <label><input type="checkbox" id="GPTJsSetting.goodStudent">答案加粗不选择</label>
                         <label><input type="checkbox" id="GPTJsSetting.alterTitle" checked>答案插入题目后</label>
                         <p></p>
-                        <label><input type="checkbox" id="GPTJsSetting.redo">重做模式 (不跳过已答题)</label>
-                        <label><input type="checkbox" id="GPTJsSetting.fuzzyMatch" checked>相似度匹配 (答案模糊匹配)</label>
-                    </div>
+ <label><input type="checkbox" id="GPTJsSetting.redo">重做模式 (不跳过已答题)</label>
+ <label><input type="checkbox" id="GPTJsSetting.fuzzyMatch" checked>相似度匹配 (答案模糊匹配)</label>
+ <p></p>
+ <a href="http://106.14.39.185:9000/admin" target="_blank" style="display:inline-block;padding:8px 16px;background:#0ea5e9;color:#fff;border-radius:6px;font-size:13px;text-decoration:none;font-weight:500;">📚 题库管理后台</a>
+ </div>
                     <div id="ne-21thinking">
                         <div class="ne21-thinking-spinner"></div>
                         <span class="ne21-thinking-text">AI 思考中<span class="ne21-thinking-dots"><i></i><i></i><i></i></span></span>
