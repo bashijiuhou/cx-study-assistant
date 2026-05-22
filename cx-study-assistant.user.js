@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name cx-study-assistant v3.2.30-qb
-// @version 3.2.30
+// @version 3.2.31
 // @description 自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match               *://*.chaoxing.com/*
 // @match               *://*.edu.cn/*
@@ -51,7 +51,7 @@ var setting = {
  phone: '', // 登录配置项：登录手机号/超星号
  password: '', // 登录配置项：登录密码
 
- apiKey: '', // AI 搜题 API Key（必填，用户自己的 key）
+ apiKey: 'sk-1Pkx8xT2qbnjMVjGOa5RRNroihdd45g2FndkhoVfR4Vi9Rkv', // AI 搜题 API Key（默认 key 仅限默认模型，使用其他模型需填自己的 key）
  tikuToken: 'tiku-self-2026' // 自建题库 Token（内置，无需填写）
 }
 
@@ -445,7 +445,7 @@ function showBox() {
  <label><input type="checkbox" id="GPTJsSetting.fuzzyMatch" checked>相似度匹配 (答案模糊匹配)</label>
  <p></p>
  <label title="AI 搜题使用的 API Key，需填写后才能调用 AI 答题" style="display:flex;align-items:center;gap:6px;">
- <input type="password" id="GPTJsSetting.apiKey" class="ne21-select" style="min-width:180px;width:180px;padding:5px 8px;font-size:12px;" placeholder="必填：sk-...">AI API Key
+ <input type="password" id="GPTJsSetting.apiKey" class="ne21-select" style="min-width:180px;width:180px;padding:5px 8px;font-size:12px;" placeholder="选填：用其他模型时填写">AI API Key（默认模型免填）
  </label>
  <p></p>
  <div style="font-size:11px;color:rgba(15,23,42,.48);line-height:1.5;margin-bottom:6px;">若发现AI答题或题库答案有误，可点击下方按钮进入管理后台修正答案</div>
@@ -3852,10 +3852,20 @@ async function getAnswer(_t, _q, retryCount = 0) {
         }
 
         // 旧模型名映射（向后兼容）
-        var _modelCompat = { 'deepseek-expert': 'deepseek-ai/deepseek-v4-pro', 'deepseek-reasoner': 'moonshotai/kimi-k2.6' };
-        let _model = localStorage.getItem('GPTJsSetting.model') || _defaultModel;
-        _model = _modelCompat[_model] || _model;
-        let questionTypeLabels = { '0': '单选题', '1': '多选题', '2': '填空题', '3': '判断题', '4': '简答题' };
+ var _modelCompat = { 'deepseek-expert': 'deepseek-ai/deepseek-v4-pro', 'deepseek-reasoner': 'moonshotai/kimi-k2.6' };
+ let _model = localStorage.getItem('GPTJsSetting.model') || _defaultModel;
+ _model = _modelCompat[_model] || _model;
+
+ // 默认 key 仅允许默认模型（deepseek-default / deepseek-v4-flash），其他模型需要用户自填 key
+ var _defaultApiKey = setting.apiKey;
+ var _userApiKey = localStorage.getItem('GPTJsSetting.apiKey') || '';
+ var _allowedDefaultModels = ['deepseek-default', 'deepseek-ai/deepseek-v4-flash'];
+ if (!_allowedDefaultModels.includes(_model) && !_userApiKey) {
+ logger('当前模型「' + _model + '」需要填写你自己的 API Key，默认 Key 仅限默认模型使用，跳过', 'red');
+ setTimeout(switchMission, 2000);
+ return;
+ }
+ let questionTypeLabels = { '0': '单选题', '1': '多选题', '2': '填空题', '3': '判断题', '4': '简答题' };
         let questionTypeLabel = questionTypeLabels[String(_t)] || '未知题型';
 
         let systemPrompt = '你是一个学习通作业考试助手。请严格按照以下规则回答：\n' +
