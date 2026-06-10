@@ -1,68 +1,80 @@
 // ==UserScript==
-// @name cx-study-assistant v3.2.30-qb
+// @name cx-study-assistant v3.2.31-qb
 // @version 3.2.31
 // @description 自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match               *://*.chaoxing.com/*
-// @match               *://*.edu.cn/*
-// @tag                 自建API
-// @connect api.bashijiuhou.com
-// @connect 106.14.39.185
-// @run-at              document-end
-// @grant               unsafeWindow
-// @grant               GM_xmlhttpRequest
-// @grant               GM_setValue
-// @grant               GM_getValue
-// @grant               GM_info
-// @grant               GM_getResourceText
-// @icon https://api.bashijiuhou.com/logo.png
-// @homepage            https://github.com/bashijiuhou/cx-study-assistant
-// @updateURL           https://raw.githubusercontent.com/bashijiuhou/cx-study-assistant/feature/question-bank/cx-study-assistant.user.js
-// @downloadURL         https://raw.githubusercontent.com/bashijiuhou/cx-study-assistant/feature/question-bank/cx-study-assistant.user.js
+// ==UserScript==
+// @name               cx-study-assistant v3.2.31-qb
+// @version            3.2.32
+// @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
+// @match              *://*.chaoxing.com/*
+// @match              *://*.edu.cn/*
+// @tag                自建API
+// @connect            api.bashijiuhou.com
+// @connect            106.14.39.185
+// @run-at             document-end
+// @grant              unsafeWindow
+// @grant              GM_xmlhttpRequest
+// @grant              GM_setValue
+// @grant              GM_getValue
+// @grant              GM_info
+// @grant              GM_getResourceText
+// @icon               https://api.bashijiuhou.com/logo.png
+// @homepage           https://github.com/bashijiuhou/cx-study-assistant
+// @updateURL          https://raw.githubusercontent.com/bashijiuhou/cx-study-assistant/feature/question-bank/cx-study-assistant.user.js
+// @downloadURL        https://raw.githubusercontent.com/bashijiuhou/cx-study-assistant/feature/question-bank/cx-study-assistant.user.js
 // ==/UserScript==
 
+/* ---------------------------------------------------
+   自定义配置区（建议使用 const/let，避免全局 var）
+   --------------------------------------------------- */
+const setting = {
+  // UI 控制
+  showBox: true,        // 是否显示脚本浮窗
+  maskImg: true,        // 是否显示皮卡丘装饰（仅视觉效果）
 
-/*********************************自定义配置区******************************************************** */
-var setting = {
-    showBox: 1,     // 显示脚本浮窗，0为关闭，1为开启，不建议关闭
-    maskImg: 1,     // 显示皮卡丘，0为关闭，1为开启，默认开启，无实质作用，只是为了减少睿智问题
+  // 功能开关
+  task: false,         // 任务点处理
+  video: true,
+  audio: true,
+  rate: 1,              // 视频/音频倍速（可在浮窗调节）
+  skip: false,         // 秒过模式：true 直接标记完成，false 使用倍速
+  review: false,
+  work: true,           // 测验自动处理
+  time: 2500,           // 作答间隔（ms）
+  reqIntervalTime: 0,   // AI 搜题请求节流（秒），0 为不限制
+  sub: false,           // 测验自动提交（有答案时）
+  force: false,        // 强制提交测验（无论是否作答）
+  decrypt: true,       // 字体解密（推荐开启）
+  redo: false,         // 重做模式（不跳过已答题）
+  fuzzyMatch: true,    // 相似度匹配（精确匹配失败时）
 
-    task: 0,        // 只处理任务点任务，0为关闭，1为开启
+  // 考试辅助
+  examTurn: false,
+  examTurnTime: false,
+  goodStudent: true,   // 好学生模式，仅加粗选项不自动作答
+  alterTitle: true,     // 将 AI 答案插入题目中（便于手动选择）
 
-    video: 1,       // 处理视频，0为关闭，1为开启
-    audio: 1,       // 处理音频，0为关闭，1为开启
-    rate: 1,        // 视频/音频倍速，默认 1（正常），可在浮窗设置中调整（1/1.25/1.5/2）
-    review: 0,      // 复习模式，0为关闭，1为开启可以补挂视频时长
+  // 自动登录（请填入有效凭证）
+  autoLogin: false,
+  phone: '',
+  password: '',
 
-    work: 1,        // 测验自动处理，0为关闭，1为开启，开启将会处理测验，关闭会跳过测验
-    time: 2500,     // 答题时间间隔，默认5s=5000
-    reqIntervalTime: 0, // 搜题（AI）请求最小间隔(秒)。0 为不节流；高并发可设 1~3 秒，避免被服务端限流
-    sub: 0,         // 测验自动提交，0为关闭,1为开启，当没答案时测验将不会提交，如需提交请设置force：1
-    force: 0,       // 测验强制提交，0为关闭，1为开启，开启此功能将会强制提交测验（无论作答与否）
-    decrypt: 1,     // 字体解密，0为关闭，1为开启，推荐开启，方法来自wyn665817大佬
-    redo: 0,        // 重做模式，0为关闭，1为开启，开启后不跳过已答题，重新AI作答覆盖旧答案
-    fuzzyMatch: 1,  // 相似度匹配，0为关闭，1为开启，开启后当精确匹配失败时使用相似度匹配选择最接近的选项
+  // AI 与题库密钥（可通过 localStorage 覆盖）
+  apiKey: 'sk-1Pk...9Rkv',
+  tikuToken: 'tiku-self-2026'
+};
 
-    examTurn: 0,     // 考试自动跳转下一题，0为关闭，1为开启
-    examTurnTime: 0, // 考试自动跳转下一题随机间隔时间(3-7s)之间，0为关闭，1为开启
-    goodStudent: 1,  // 好学生模式,不自动选择答案,仅将单选题和多选题的ABCD加粗
-    alterTitle: 1,  //修改题目,将AI回复的答案插入题目中,不建议关闭,AI回复不能完全匹配答案,题目显示答案供手动选择
-
- autoLogin: 0, // 自动登录，0为关闭，1为开启，开启此功能请配置登陆配置项
- phone: '', // 登录配置项：登录手机号/超星号
- password: '', // 登录配置项：登录密码
-
- apiKey: 'sk-1Pkx8xT2qbnjMVjGOa5RRNroihdd45g2FndkhoVfR4Vi9Rkv', // AI 搜题 API Key（默认 key 仅限默认模型，使用其他模型需填自己的 key）
- tikuToken: 'tiku-self-2026' // 自建题库 Token（内置，无需填写）
-}
-
-
-var _w = unsafeWindow,
-    _l = location,
-    _d = _w.document,
-    $ = _w.jQuery || top.jQuery,
-    md5 = md5 || window.md5,
-    UE = _w.UE,
-    Swal = Swal || window.Swal;
+/* ---------------------------------------------------
+   常用全局变量（使用 const/let 替代 var）
+   --------------------------------------------------- */
+const _w = unsafeWindow;
+const _l = location;
+const _d = _w.document;
+const $ = _w.jQuery || top.jQuery;
+const md5 = md5 || window.md5;
+const UE = _w.UE;
+const Swal = Swal || window.Swal;
 
 // 多域名候选及自动测速选择
 // API 配置 — 使用自建 New-API
@@ -279,11 +291,12 @@ function findFuzzyMatchMultiple(optionTexts, aiAnswer, threshold) {
     return matched;
 }
 
-// 读取播放倍速：优先 localStorage（UI 设置），否则回退 setting.rate；范围 (0, 16]
+// 读取播放倍速：优先 localStorage（UI 设置），否则回退 setting.rate；范围 (0, 16]，0 表示秒过（直接标记完成）
 function getRate() {
     var stored = localStorage.getItem('GPTJsSetting.rate');
     var n = stored !== null ? parseFloat(stored) : (setting.rate || 1);
-    if (!isFinite(n) || n <= 0) n = 1;
+    // 0 代表秒过，留给后续逻辑处理；负数或 NaN 则恢复为正常速率 1
+    if (!isFinite(n) || n < 0) n = 1;
     if (n > 16) n = 16;
     return n;
 }
@@ -429,6 +442,7 @@ function showBox() {
                     <div id="ne-21notice"></div>
                     <div id="userInfo"></div>
                     <div id="moreSettings" style="display:none;">
+                        <label><input type="checkbox" id="GPTJsSetting.skip">开启秒过模式</label>
                         <label><select id="GPTJsSetting.rate" class="ne21-select"><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>视频/音频倍速</label>
                         <label title="两次 AI 搜题请求之间的最小间隔（秒）。0 为不节流；高并发整卷预览、小号被限流时可设 1~3">
                             <input type="number" id="GPTJsSetting.reqIntervalTime" class="ne21-select" min="0" max="60" step="1" style="min-width:56px;width:56px;padding:5px 8px;">搜题间隔 (秒)
@@ -629,7 +643,39 @@ function showBox() {
             </select>
             <button id="moreSettingsBtn" class="ne21-btn ne21-btn-secondary">设置</button>
         </div>
+        <div class="ne21-row" style="margin-top:6px;">
+            <button id="instantFinishBtn" class="ne21-btn" style="background:rgba(234,88,12,.15);color:#ea580c;border-color:rgba(234,88,12,.35);">⚡ 秒过</button>
+        </div>
     `);
+
+    // 秒过按钮点击事件：切换状态并控制按钮样式
+    (function () {
+        var instantBtn = panelDoc.getElementById('instantFinishBtn');
+        if (!instantBtn) return;
+        // 初始化状态
+        var isSkip = localStorage.getItem('GPTJsSetting.skip') === 'true';
+        if (isSkip) {
+            instantBtn.style.background = 'rgba(234,88,12,.95)';
+            instantBtn.style.color = '#fff';
+            instantBtn.textContent = '⚡ 秒过中';
+        }
+        instantBtn.addEventListener('click', function () {
+            var current = localStorage.getItem('GPTJsSetting.skip') === 'true';
+            var next = !current;
+            localStorage.setItem('GPTJsSetting.skip', next ? 'true' : 'false');
+            if (next) {
+                instantBtn.style.background = 'rgba(234,88,12,.95)';
+                instantBtn.style.color = '#fff';
+                instantBtn.textContent = '⚡ 秒过中';
+                logger('秒过模式已开启', 'orange');
+            } else {
+                instantBtn.style.background = 'rgba(234,88,12,.15)';
+                instantBtn.style.color = '#ea580c';
+                instantBtn.textContent = '⚡ 秒过';
+                logger('秒过模式已关闭');
+            }
+        });
+    })();
 
     // 同步恢复上次选中的模型，避免等 window.onload 造成的闪烁
     // 旧模型名映射（向后兼容）
@@ -946,7 +992,15 @@ function missonVideo(dom, obj) {
             executed = true;
             clearInterval(intervalId);
 
-            // 计算最终倍速：优先用户设置；若超星禁用了倍速菜单则强制 1×
+            // 计算最终倍速或秒过：优先用户设置；若超星禁用了倍速菜单则强制 1×
+            // 秒过开关：通过 localStorage 控制，默认关闭
+            const skipMode = localStorage.getItem('GPTJsSetting.skip') === 'true';
+            if (skipMode) {
+                logger(`${name} - ${mediaType} 已秒过（跳过播放）`);
+                if (media) { try { media.currentTime = media.duration; } catch (_) {} }
+                // 不再执行后续倍速锁定逻辑，直接返回
+                return;
+            }
             const userRate = getRate();
             const rateDisabled = mediaType === 'video' && isPlaybackRateDisabled(doc);
             const finalRate = rateDisabled ? 1 : userRate;
