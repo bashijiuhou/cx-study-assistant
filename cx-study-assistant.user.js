@@ -1,10 +1,5 @@
 // ==UserScript==
-// @name cx-study-assistant v3.2.31-qb
-// @version 3.2.31
-// @description 自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
-// @match               *://*.chaoxing.com/*
-// ==UserScript==
-// @name               cx-study-assistant v3.2.31-qb
+// @name               cx-study-assistant v3.2.32-qb
 // @version            3.2.32
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
@@ -80,7 +75,7 @@ const Swal = Swal || window.Swal;
 // API 配置 — 使用自建 New-API
 var _host = "https://api.bashijiuhou.com";
 var _apiKey = localStorage.getItem('GPTJsSetting.apiKey') || setting.apiKey || "";
-var _defaultModel = "deepseek-ai/deepseek-v4-flash";
+var _defaultModel = "z-ai/glm-5.1";
 var _tikuToken = localStorage.getItem('GPTJsSetting.tikuToken') || setting.tikuToken || "tiku-self-2026";
 
 
@@ -633,11 +628,11 @@ function showBox() {
                 <button class="ne21-btn ne21-btn-primary">充值</button>
             </a>
             <select id="modelSelect">
-                <option value="deepseek-default">DeepSeek Default (默认)</option>
+                <option value="z-ai/glm-5.1">GLM-5.1 (智谱 · 免费)</option>
+                <option value="deepseek-default">DeepSeek Default</option>
                 <option value="deepseek-ai/deepseek-v4-flash">DeepSeek V4 Flash (推荐 ⚡)</option>
                 <option value="deepseek-ai/deepseek-v4-pro">DeepSeek V4 Pro (高质量 🎯)</option>
                 <option value="moonshotai/kimi-k2.6">Kimi K2.6 (长文本)</option>
-                <option value="z-ai/glm-5.1">GLM-5.1 (智谱)</option>
                 <option value="minimaxai/minimax-m2.7">MiniMax M2.7</option>
                 <option value="google/gemma-3-12b-it">Gemma 3 12B (轻量)</option>
             </select>
@@ -3910,10 +3905,10 @@ async function getAnswer(_t, _q, retryCount = 0) {
  let _model = localStorage.getItem('GPTJsSetting.model') || _defaultModel;
  _model = _modelCompat[_model] || _model;
 
- // 默认 key 仅允许默认模型（deepseek-default / deepseek-v4-flash），其他模型需要用户自填 key
+ // 默认 key 仅允许默认模型（GLM-5.1），其他模型需要用户自填 key
  var _defaultApiKey = setting.apiKey;
  var _userApiKey = localStorage.getItem('GPTJsSetting.apiKey') || '';
- var _allowedDefaultModels = ['deepseek-default', 'deepseek-ai/deepseek-v4-flash'];
+ var _allowedDefaultModels = ['z-ai/glm-5.1'];
  if (!_allowedDefaultModels.includes(_model) && !_userApiKey) {
  logger('当前模型「' + _model + '」需要填写你自己的 API Key，默认 Key 仅限默认模型使用，跳过', 'red');
  setTimeout(switchMission, 2000);
