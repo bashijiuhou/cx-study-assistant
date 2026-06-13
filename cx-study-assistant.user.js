@@ -69,7 +69,7 @@ const _d = _w.document;
 const $ = _w.jQuery || top.jQuery;
 const _md5 = window.md5 || unsafeWindow.md5;
 const UE = _w.UE;
-const Swal = Swal || window.Swal;
+const _Swal = window.Swal || unsafeWindow.Swal;
 
 // 多域名候选及自动测速选择
 // API 配置 — 使用自建 New-API
