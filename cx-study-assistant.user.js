@@ -16,8 +16,8 @@
 // @grant              GM_getResourceText
 // @icon               https://api.bashijiuhou.com/logo.png
 // @homepage           https://github.com/bashijiuhou/cx-study-assistant
-// @updateURL          https://raw.githubusercontent.com/bashijiuhou/cx-study-assistant/feature/question-bank/cx-study-assistant.user.js
-// @downloadURL        https://raw.githubusercontent.com/bashijiuhou/cx-study-assistant/feature/question-bank/cx-study-assistant.user.js
+// @updateURL          https://raw.githubusercontent.com/bashijiuhou/cx-study-assistant/cx-study-倍速/cx-study-assistant.user.js
+// @downloadURL        https://raw.githubusercontent.com/bashijiuhou/cx-study-assistant/cx-study-倍速/cx-study-assistant.user.js
 // ==/UserScript==
 
 /* ---------------------------------------------------
@@ -106,8 +106,10 @@ function waitForJQueryElement(selector) {
 }
 
 if (_l.hostname == 'i.mooc.chaoxing.com' || _l.hostname == "i.chaoxing.com") {
-    // 
-} else if (_l.pathname == '/login' && setting.autoLogin) {
+    // 这些域名也有课程页面需求，不提前阻断，继续交给下面路径判断处理
+}
+
+if (_l.pathname == '/login' && setting.autoLogin) {
     showBox()
     waitForJQueryElement('#phone').then(function () { autoLogin() });
 } else if (_l.pathname.includes('/mycourse/studentstudy')) {
