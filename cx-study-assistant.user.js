@@ -67,7 +67,7 @@ const _w = unsafeWindow;
 const _l = location;
 const _d = _w.document;
 const $ = _w.jQuery || top.jQuery;
-const md5 = md5 || window.md5;
+const _md5 = window.md5 || unsafeWindow.md5;
 const UE = _w.UE;
 const Swal = Swal || window.Swal;
 
@@ -3661,7 +3661,7 @@ function saveQuestionBank(bank) {
 }
 
 function questionHash(_t, _payload) {
-    return md5(String(_t) + '|' + String(_payload).replace(/\s+/g, ' ').trim());
+    return _md5(String(_t) + '|' + String(_payload).replace(/\s+/g, ' ').trim());
 }
 
 function questionBankLookup(_t, _payload) {
@@ -4322,7 +4322,7 @@ function decryptFont() {
         $tip = Typr.U.codeToGlyph(font, i);
         if (!$tip) continue;
         $tip = Typr.U.glyphToPath(font, $tip);
-        $tip = md5(JSON.stringify($tip)).slice(24);
+        $tip = _md5(JSON.stringify($tip)).slice(24);
         match[i] = table[$tip];
     }
     $('.font-cxsecret').html(function (index, html) {
