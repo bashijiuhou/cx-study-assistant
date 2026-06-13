@@ -439,7 +439,6 @@ function showBox() {
                     <div id="ne-21notice"></div>
                     <div id="userInfo"></div>
                     <div id="moreSettings" style="display:none;">
-                        <label><input type="checkbox" id="GPTJsSetting.skip">开启秒过模式</label>
                         <label><select id="GPTJsSetting.rate" class="ne21-select"><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>视频/音频倍速</label>
                         <label title="两次 AI 搜题请求之间的最小间隔（秒）。0 为不节流；高并发整卷预览、小号被限流时可设 1~3">
                             <input type="number" id="GPTJsSetting.reqIntervalTime" class="ne21-select" min="0" max="60" step="1" style="min-width:56px;width:56px;padding:5px 8px;">搜题间隔 (秒)
