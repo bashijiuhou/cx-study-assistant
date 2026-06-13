@@ -56,7 +56,7 @@ const setting = {
   password: '',
 
   // AI 与题库密钥（可通过 localStorage 覆盖）
-  apiKey: 'sk-1Pk...9Rkv',
+  apiKey: '',               // 默认留空，用户需要在面板中填写自己的 API Key
   tikuToken: 'tiku-self-2026'
 };
 
@@ -630,12 +630,13 @@ function showBox() {
             </a>
             <select id="modelSelect">
                 <option value="z-ai/glm-5.1">GLM-5.1 (智谱 · 免费)</option>
-                <option value="deepseek-default">DeepSeek Default</option>
+                <option value="glm-4-flash">GLM-4 Flash (轻量)</option>
+                <option value="glm-5">GLM-5 (免费)</option>
                 <option value="deepseek-ai/deepseek-v4-flash">DeepSeek V4 Flash (推荐 ⚡)</option>
-                <option value="deepseek-ai/deepseek-v4-pro">DeepSeek V4 Pro (高质量 🎯)</option>
+                <option value="openai/gpt-oss-120b:free">GPT-OSS 120B (免费)</option>
+                <option value="qwen/qwen3-32b">Qwen3 32B</option>
                 <option value="moonshotai/kimi-k2.6">Kimi K2.6 (长文本)</option>
                 <option value="minimaxai/minimax-m2.7">MiniMax M2.7</option>
-                <option value="google/gemma-3-12b-it">Gemma 3 12B (轻量)</option>
             </select>
             <button id="moreSettingsBtn" class="ne21-btn ne21-btn-secondary">设置</button>
         </div>
@@ -3909,7 +3910,7 @@ async function getAnswer(_t, _q, retryCount = 0) {
  // 默认 key 仅允许默认模型（GLM-5.1），其他模型需要用户自填 key
  var _defaultApiKey = setting.apiKey;
  var _userApiKey = localStorage.getItem('GPTJsSetting.apiKey') || '';
- var _allowedDefaultModels = ['z-ai/glm-5.1'];
+    var _allowedDefaultModels = ['z-ai/glm-5.1', 'glm-4-flash', 'glm-5', 'openai/gpt-oss-120b:free'];
  if (!_allowedDefaultModels.includes(_model) && !_userApiKey) {
  logger('当前模型「' + _model + '」需要填写你自己的 API Key，默认 Key 仅限默认模型使用，跳过', 'red');
  setTimeout(switchMission, 2000);
