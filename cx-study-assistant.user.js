@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name               cx-study-assistant v3.2.32-qb
-// @version            3.2.32
+// @name               cx-study-assistant v3.2.33-qb
+// @version            3.2.33
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -33,7 +33,6 @@ const setting = {
   video: true,
   audio: true,
   rate: 1,              // 视频/音频倍速（可在浮窗调节）
-  skip: false,         // 秒过模式：true 直接标记完成，false 使用倍速
   review: false,
   work: true,           // 测验自动处理
   time: 2500,           // 作答间隔（ms）
@@ -75,7 +74,7 @@ const _Swal = window.Swal || unsafeWindow.Swal;
 // API 配置 — 使用自建 New-API
 var _host = "https://api.bashijiuhou.com";
 var _apiKey = localStorage.getItem('GPTJsSetting.apiKey') || setting.apiKey || "";
-var _defaultModel = "z-ai/glm-5.1";
+var _defaultModel = "nvidia/nemotron-3-super-120b-a12b";
 var _tikuToken = localStorage.getItem('GPTJsSetting.tikuToken') || setting.tikuToken || "tiku-self-2026";
 
 
@@ -288,11 +287,11 @@ function findFuzzyMatchMultiple(optionTexts, aiAnswer, threshold) {
     return matched;
 }
 
-// 读取播放倍速：优先 localStorage（UI 设置），否则回退 setting.rate；范围 (0, 16]，0 表示秒过（直接标记完成）
+// 读取播放倍速：优先 localStorage（UI 设置），否则回退 setting.rate；范围 (0, 16]
 function getRate() {
     var stored = localStorage.getItem('GPTJsSetting.rate');
     var n = stored !== null ? parseFloat(stored) : (setting.rate || 1);
-    // 0 代表秒过，留给后续逻辑处理；负数或 NaN 则恢复为正常速率 1
+    // 负数或 NaN 则恢复为正常速率 1
     if (!isFinite(n) || n < 0) n = 1;
     if (n > 16) n = 16;
     return n;
@@ -629,56 +628,33 @@ function showBox() {
                 <button class="ne21-btn ne21-btn-primary">充值</button>
             </a>
             <select id="modelSelect">
-                <option value="z-ai/glm-5.1">GLM-5.1 (智谱 · 免费)</option>
-                <option value="glm-4-flash">GLM-4 Flash (轻量)</option>
-                <option value="glm-5">GLM-5 (免费)</option>
-                <option value="deepseek-ai/deepseek-v4-flash">DeepSeek V4 Flash (推荐 ⚡)</option>
-                <option value="openai/gpt-oss-120b:free">GPT-OSS 120B (免费)</option>
-                <option value="qwen/qwen3-32b">Qwen3 32B</option>
-                <option value="moonshotai/kimi-k2.6">Kimi K2.6 (长文本)</option>
-                <option value="minimaxai/minimax-m2.7">MiniMax M2.7</option>
+                <option value="nvidia/nemotron-3-super-120b-a12b">NVIDIA Nemotron 3 Super (推荐 ⚡)</option>
+                <option value="deepseek-ai/deepseek-v4-flash-0731">DeepSeek V4 Flash</option>
+                <option value="openai/gpt-oss-20b">GPT-OSS 20B</option>
+                <option value="nvidia/nemotron-3.5-lightning-30b-a3b">Nemotron 3.5 Lightning</option>
+                <option value="nvidia/nemotron-3-ultra-550b-a55b">Nemotron 3 Ultra (慢)</option>
             </select>
             <button id="moreSettingsBtn" class="ne21-btn ne21-btn-secondary">设置</button>
         </div>
         <div class="ne21-row" style="margin-top:6px;">
-            <button id="instantFinishBtn" class="ne21-btn" style="background:rgba(234,88,12,.15);color:#ea580c;border-color:rgba(234,88,12,.35);">⚡ 秒过</button>
         </div>
     `);
-
-    // 秒过按钮点击事件：切换状态并控制按钮样式
-    (function () {
-        var instantBtn = panelDoc.getElementById('instantFinishBtn');
-        if (!instantBtn) return;
-        // 初始化状态
-        var isSkip = localStorage.getItem('GPTJsSetting.skip') === 'true';
-        if (isSkip) {
-            instantBtn.style.background = 'rgba(234,88,12,.95)';
-            instantBtn.style.color = '#fff';
-            instantBtn.textContent = '⚡ 秒过中';
-        }
-        instantBtn.addEventListener('click', function () {
-            var current = localStorage.getItem('GPTJsSetting.skip') === 'true';
-            var next = !current;
-            localStorage.setItem('GPTJsSetting.skip', next ? 'true' : 'false');
-            if (next) {
-                instantBtn.style.background = 'rgba(234,88,12,.95)';
-                instantBtn.style.color = '#fff';
-                instantBtn.textContent = '⚡ 秒过中';
-                logger('秒过模式已开启', 'orange');
-            } else {
-                instantBtn.style.background = 'rgba(234,88,12,.15)';
-                instantBtn.style.color = '#ea580c';
-                instantBtn.textContent = '⚡ 秒过';
-                logger('秒过模式已关闭');
-            }
-        });
-    })();
 
     // 同步恢复上次选中的模型，避免等 window.onload 造成的闪烁
     // 旧模型名映射（向后兼容）
     var _modelCompat = {
-        'deepseek-expert': 'deepseek-ai/deepseek-v4-pro',
-        'deepseek-reasoner': 'moonshotai/kimi-k2.6'
+        // 旧/已下线模型映射到当前可用模型，避免老用户 localStorage 激活坏模型
+        'z-ai/glm-5.1': 'nvidia/nemotron-3-super-120b-a12b',
+        'glm-4-flash': 'deepseek-ai/deepseek-v4-flash-0731',
+        'glm-5': 'nvidia/nemotron-3-super-120b-a12b',
+        'deepseek-ai/deepseek-v4-flash': 'deepseek-ai/deepseek-v4-flash-0731',
+        'deepseek-default': 'deepseek-ai/deepseek-v4-flash-0731',
+        'deepseek-expert': 'deepseek-ai/deepseek-v4-flash-0731',
+        'deepseek-reasoner': 'nvidia/nemotron-3-super-120b-a12b',
+        'openai/gpt-oss-120b:free': 'openai/gpt-oss-20b',
+        'qwen/qwen3-32b': 'openai/gpt-oss-20b',
+        'moonshotai/kimi-k2.6': 'nvidia/nemotron-3-super-120b-a12b',
+        'minimaxai/minimax-m2.7': 'nvidia/nemotron-3-super-120b-a12b'
     };
     var lastSelectedModel = localStorage.getItem('GPTJsSetting.model') || _defaultModel;
     lastSelectedModel = _modelCompat[lastSelectedModel] || lastSelectedModel;
@@ -989,15 +965,7 @@ function missonVideo(dom, obj) {
             executed = true;
             clearInterval(intervalId);
 
-            // 计算最终倍速或秒过：优先用户设置；若超星禁用了倍速菜单则强制 1×
-            // 秒过开关：通过 localStorage 控制，默认关闭
-            const skipMode = localStorage.getItem('GPTJsSetting.skip') === 'true';
-            if (skipMode) {
-                logger(`${name} - ${mediaType} 已秒过（跳过播放）`);
-                if (media) { try { media.currentTime = media.duration; } catch (_) {} }
-                // 不再执行后续倍速锁定逻辑，直接返回
-                return;
-            }
+            // 计算最终倍速：优先用户设置；若超星禁用了倍速菜单则强制 1×
             const userRate = getRate();
             const rateDisabled = mediaType === 'video' && isPlaybackRateDisabled(doc);
             const finalRate = rateDisabled ? 1 : userRate;
@@ -3903,14 +3871,14 @@ async function getAnswer(_t, _q, retryCount = 0) {
         }
 
         // 旧模型名映射（向后兼容）
- var _modelCompat = { 'deepseek-expert': 'deepseek-ai/deepseek-v4-pro', 'deepseek-reasoner': 'moonshotai/kimi-k2.6' };
+var _modelCompat = { 'z-ai/glm-5.1': 'nvidia/nemotron-3-super-120b-a12b', 'glm-4-flash': 'deepseek-ai/deepseek-v4-flash-0731', 'glm-5': 'nvidia/nemotron-3-super-120b-a12b', 'deepseek-ai/deepseek-v4-flash': 'deepseek-ai/deepseek-v4-flash-0731', 'deepseek-default': 'deepseek-ai/deepseek-v4-flash-0731', 'deepseek-expert': 'deepseek-ai/deepseek-v4-flash-0731', 'deepseek-reasoner': 'nvidia/nemotron-3-super-120b-a12b', 'openai/gpt-oss-120b:free': 'openai/gpt-oss-20b', 'qwen/qwen3-32b': 'openai/gpt-oss-20b', 'moonshotai/kimi-k2.6': 'nvidia/nemotron-3-super-120b-a12b', 'minimaxai/minimax-m2.7': 'nvidia/nemotron-3-super-120b-a12b' };
  let _model = localStorage.getItem('GPTJsSetting.model') || _defaultModel;
  _model = _modelCompat[_model] || _model;
 
- // 默认 key 仅允许默认模型（GLM-5.1），其他模型需要用户自填 key
+ // 默认 key 仅允许默认模型，其他模型需要用户自填 key
  var _defaultApiKey = setting.apiKey;
  var _userApiKey = localStorage.getItem('GPTJsSetting.apiKey') || '';
-    var _allowedDefaultModels = ['z-ai/glm-5.1', 'glm-4-flash', 'glm-5', 'openai/gpt-oss-120b:free'];
+ var _allowedDefaultModels = ['nvidia/nemotron-3-super-120b-a12b', 'deepseek-ai/deepseek-v4-flash-0731', 'openai/gpt-oss-20b', 'nvidia/nemotron-3.5-lightning-30b-a3b', 'nvidia/nemotron-3-ultra-550b-a55b'];
  if (!_allowedDefaultModels.includes(_model) && !_userApiKey) {
  logger('当前模型「' + _model + '」需要填写你自己的 API Key，默认 Key 仅限默认模型使用，跳过', 'red');
  setTimeout(switchMission, 2000);
