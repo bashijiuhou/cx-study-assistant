@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name               cx-study-assistant v3.2.35-qb
-// @version            3.2.35
+// @name               cx-study-assistant v3.2.36-qb
+// @version            3.2.36
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -3921,7 +3921,24 @@ async function verifyQuestionBankFromResultPage($scope) {
     if (!isCheckAnswerEnabled()) return;
     var questions = parseAnswerDetailPage($scope);
     if (!questions.length) {
-        logger('🔎 答题详情页未解析到题目，跳过正确答案核对（可能是详情页结构不同）', 'gray');
+        // 诊断：打印当前页面可用的容器类，便于调整选择器
+        var d = { TiMu: 0, Py_mian1: 0, questionLi: 0, timuItem: 0, pdSide: 0, Zy_TItle: 0, answerLi: 0, keyLi: 0, otherAns: 0 };
+        try {
+            if ($scope && $scope.length) {
+                d.TiMu = $scope.find('.TiMu').length;
+                d.Py_mian1 = $scope.find('.Py-mian1').length;
+                d.questionLi = $scope.find('.questionLi').length;
+                d.timuItem = $scope.find('.timuItem').length;
+                d.pdSide = $scope.find('.pdSide').length;
+                d.Zy_TItle = $scope.find('.Zy_TItle').length;
+                d.answerLi = $scope.find('.answerList li').length;
+                d.keyLi = $scope.find('ul.key li, .key li').length;
+                d.otherAns = $scope.find('.choose_answer, .correctAnswer, .rightAnswer, .mark, .bool').length;
+                // 顺带把详情页 HTML 存一份到 localStorage，方便排查
+                try { localStorage.setItem('GPTJsSetting.debugResultHTML', $scope.html().slice(0, 12000)); } catch (e) {}
+            }
+        } catch (e) {}
+        logger('🔎 答题详情页未解析到题目。容器探测 → ' + JSON.stringify(d) + '（详情已存 localStorage.GPTJsSetting.debugResultHTML）', 'orange');
         return;
     }
     logger('🔎 答题核对模式：解析到 ' + questions.length + ' 题，开始对比题库...', 'blue');
