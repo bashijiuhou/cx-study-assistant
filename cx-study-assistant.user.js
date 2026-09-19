@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name               cx-study-assistant v3.2.36-qb
-// @version            3.2.36
+// @name               cx-study-assistant v3.2.37-qb
+// @version            3.2.37
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -3921,8 +3921,9 @@ async function verifyQuestionBankFromResultPage($scope) {
     if (!isCheckAnswerEnabled()) return;
     var questions = parseAnswerDetailPage($scope);
     if (!questions.length) {
-        // 诊断：打印当前页面可用的容器类，便于调整选择器
+        // 诊断：打印已完成测验页的实际结构，便于调整选择器（不依赖控制台，直接进浮窗日志）
         var d = { TiMu: 0, Py_mian1: 0, questionLi: 0, timuItem: 0, pdSide: 0, Zy_TItle: 0, answerLi: 0, keyLi: 0, otherAns: 0 };
+        var structure = [];
         try {
             if ($scope && $scope.length) {
                 d.TiMu = $scope.find('.TiMu').length;
@@ -3934,11 +3935,23 @@ async function verifyQuestionBankFromResultPage($scope) {
                 d.answerLi = $scope.find('.answerList li').length;
                 d.keyLi = $scope.find('ul.key li, .key li').length;
                 d.otherAns = $scope.find('.choose_answer, .correctAnswer, .rightAnswer, .mark, .bool').length;
-                // 顺带把详情页 HTML 存一份到 localStorage，方便排查
-                try { localStorage.setItem('GPTJsSetting.debugResultHTML', $scope.html().slice(0, 12000)); } catch (e) {}
+                // 结构摘要：.newTestCon 的直接子节点 tag.class
+                var $nc = $scope.find('.newTestCon').first();
+                (($nc.length ? $nc : $scope).children().each(function () {
+                    var cn = (this.className || '').toString().replace(/\s+/g, ' ');
+                    structure.push(this.tagName.toLowerCase() + '.' + cn.slice(0, 50));
+                }));
+                if (!structure.length) {
+                    $scope.children().slice(0, 12).each(function () {
+                        var cn = (this.className || '').toString().replace(/\s+/g, ' ');
+                        structure.push(this.tagName.toLowerCase() + '.' + cn.slice(0, 50));
+                    });
+                }
+                // 顺带把详情页 HTML 存一份到 localStorage，方便完整排查
+                try { localStorage.setItem('GPTJsSetting.debugResultHTML', (($nc.length ? $nc.html() : $scope.html()) || '').slice(0, 8000)); } catch (e) {}
             }
         } catch (e) {}
-        logger('🔎 答题详情页未解析到题目。容器探测 → ' + JSON.stringify(d) + '（详情已存 localStorage.GPTJsSetting.debugResultHTML）', 'orange');
+        logger('🔎 答题详情页未解析到题目。容器探测=' + JSON.stringify(d) + ' 结构→ ' + (structure.join(' | ') || '(空)'), 'orange');
         return;
     }
     logger('🔎 答题核对模式：解析到 ' + questions.length + ' 题，开始对比题库...', 'blue');
