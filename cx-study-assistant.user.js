@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name               cx-study-assistant v3.2.34-qb
-// @version            3.2.34
+// @name               cx-study-assistant v3.2.35-qb
+// @version            3.2.35
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -453,7 +453,7 @@ function showBox() {
                         <p></p>
  <label><input type="checkbox" id="GPTJsSetting.redo">重做模式 (不跳过已答题)</label>
  <label><input type="checkbox" id="GPTJsSetting.fuzzyMatch" checked>相似度匹配 (答案模糊匹配)</label>
- <label title="提交测验后不自动跳转，等答题详情页公布答案与分数，自动核对并修正题库（错误答案改为公布的正确答案，置信度标记为'根据答案修改'）"><input type="checkbox" id="GPTJsSetting.checkAnswer">答题核对模式 (提交后核对修正题库)</label>
+ <label title="提交测验后不自动跳转，等答题详情页公布答案与分数，自动核对并修正题库；已提交(已完成)的测验页也会自动核对公布答案（错误答案改为公布的正确答案，置信度标记为'根据答案修改'）"><input type="checkbox" id="GPTJsSetting.checkAnswer">答题核对模式 (提交后核对修正题库 · 含已提交测验)</label>
  <p></p>
  <label title="AI 搜题使用的 API Key，需填写后才能调用 AI 答题" style="display:flex;align-items:center;gap:6px;">
  <input type="password" id="GPTJsSetting.apiKey" class="ne21-select" style="min-width:180px;width:180px;padding:5px 8px;font-size:12px;" placeholder="选填：用其他模型时填写">AI API Key（默认模型免填）
@@ -1348,6 +1348,29 @@ function afterSubmitNextFrame($frameRef, index, doms) {
     }, 4000);
 }
 
+// 核对模式：针对【已提交】的测验（状态=已完成，答案已公布）也做核对。
+// 已提交测验当前 iframe 就是答题详情页，直接解析核对，完成后继续下一任务。
+function verifyCompletedQuizThenContinue(index, doms, phoneWeb, workIframe, isPhone) {
+    logger('🔎 答题核对模式：检测到已提交测验，核对公布答案...', 'blue');
+    setTimeout(function () {
+        var doc = null;
+        try {
+            if (workIframe && workIframe.contents && workIframe.contents().length) doc = $(workIframe).contents();
+            else if (workIframe && workIframe.ownerDocument) doc = $(workIframe.ownerDocument);
+        } catch (e) { doc = null; }
+        verifyQuestionBankFromResultPage(doc).then(function () {
+            logger('🔎 核对完成，继续下一任务。', 'green');
+            _mlist.splice(0, 1);
+            _domList.splice(0, 1);
+            var adv = function () {
+                if (isPhone) startDoPhoneCyWork(index + 1, doms, phoneWeb);
+                else startDoCyWork(index + 1, doms);
+            };
+            setTimeout(adv, 3000);
+        });
+    }, 2000);
+}
+
 function missonWork(dom, obj) {
     if (!setting.work) {
         logger('用户设置不自动处理测验，准备处理下一个任务', 'green')
@@ -2055,6 +2078,8 @@ function startDoPhoneCyWork(index, doms, phoneWeb) {
             getElement($(doms[index]).contents()[0], 'iframe[src="' + phoneWeb + '"]').then((element) => {
                 setTimeout(() => { doPhoneWork($(element).contents()) }, 3000)
             })
+        } else if (isCheckAnswerEnabled() && workStatus.indexOf("已完成") != -1) {
+            verifyCompletedQuizThenContinue(index, doms, phoneWeb, workIframe, true)
         } else if (workStatus.indexOf("待做") != -1 || workStatus.indexOf("待完成") != -1 || workStatus.indexOf("重做") != -1 || workStatus.indexOf("未达到") != -1) {
             var isRedoStatus = workStatus.indexOf("重做") != -1 || workStatus.indexOf("未达到") != -1
             logger('测验：' + (index + 1) + (isRedoStatus ? ',未达到及格线,准备重做...' : ',准备处理此测验...'), 'purple')
@@ -2098,6 +2123,8 @@ function startDoCyWork(index, doms) {
         if (isRedoMode() && workStatus.indexOf("已完成") != -1) {
             logger('测验：' + (index + 1) + ',重做模式下重新处理已完成测验', 'blue')
             setTimeout(() => { doWork(index, doms, workIframe) }, 5000)
+        } else if (isCheckAnswerEnabled() && workStatus.indexOf("已完成") != -1) {
+            verifyCompletedQuizThenContinue(index, doms, null, workIframe, false)
         } else if (workStatus.indexOf("待做") != -1 || workStatus.indexOf("待完成") != -1 || workStatus.indexOf("重做") != -1 || workStatus.indexOf("未达到") != -1) {
             var isRedoStatus = workStatus.indexOf("重做") != -1 || workStatus.indexOf("未达到") != -1
             logger('测验：' + (index + 1) + (isRedoStatus ? ',未达到及格线,准备重做...' : ',准备处理此测验...'), 'purple')
