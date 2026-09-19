@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name               cx-study-assistant v3.2.37-qb
-// @version            3.2.37
+// @name               cx-study-assistant v3.2.38-qb
+// @version            3.2.38
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -1349,26 +1349,47 @@ function afterSubmitNextFrame($frameRef, index, doms) {
 }
 
 // 核对模式：针对【已提交】的测验（状态=已完成，答案已公布）也做核对。
-// 已提交测验当前 iframe 就是答题详情页，直接解析核对，完成后继续下一任务。
+// 关键：已完成测验 iframe 初始可能是空模板或汇总横幅，答题详情是异步加载的，
+// 所以这里像重做模式一样把 iframe 加载为答题详情页，然后【轮询等题目容器出现】再解析。
+// 最多轮询 ~15 秒，仍加载不出才放弃并继续下一任务（绝不卡死自动流程）。
 function verifyCompletedQuizThenContinue(index, doms, phoneWeb, workIframe, isPhone) {
-    logger('🔎 答题核对模式：检测到已提交测验，核对公布答案...', 'blue');
-    setTimeout(function () {
+    logger('🔎 答题核对模式：检测到已提交测验，加载答题详情页并核对公布答案...', 'blue');
+    // 手机版：把已完成测验 iframe 加载为 phoneWeb 详情页（与重做模式同款入口，会显示题目+答案）
+    if (isPhone && phoneWeb) {
+        try { $(workIframe).attr('src', phoneWeb); } catch (e) {}
+    }
+    var attempts = 0, maxAttempts = 6;
+    function tryParse() {
+        if (!isCheckAnswerEnabled()) {
+            _mlist.splice(0, 1); _domList.splice(0, 1);
+            var adv0 = function () { if (isPhone) startDoPhoneCyWork(index + 1, doms, phoneWeb); else startDoCyWork(index + 1, doms); };
+            setTimeout(adv0, 3000);
+            return;
+        }
         var doc = null;
         try {
-            if (workIframe && workIframe.contents && workIframe.contents().length) doc = $(workIframe).contents();
+            if (workIframe && workIframe.contents && workIframe.contents().length) doc = $(workIframe.contents());
             else if (workIframe && workIframe.ownerDocument) doc = $(workIframe.ownerDocument);
         } catch (e) { doc = null; }
-        verifyQuestionBankFromResultPage(doc).then(function () {
-            logger('🔎 核对完成，继续下一任务。', 'green');
-            _mlist.splice(0, 1);
-            _domList.splice(0, 1);
-            var adv = function () {
-                if (isPhone) startDoPhoneCyWork(index + 1, doms, phoneWeb);
-                else startDoCyWork(index + 1, doms);
-            };
-            setTimeout(adv, 3000);
-        });
-    }, 2000);
+        var hasContent = false;
+        try { hasContent = doc && doc.length && (doc.find('.Py-mian1').length || doc.find('.TiMu').length); } catch (e) {}
+        if (hasContent || attempts >= maxAttempts) {
+            verifyQuestionBankFromResultPage(doc).then(function () {
+                logger('🔎 核对完成，继续下一任务。', 'green');
+                _mlist.splice(0, 1);
+                _domList.splice(0, 1);
+                var adv = function () {
+                    if (isPhone) startDoPhoneCyWork(index + 1, doms, phoneWeb);
+                    else startDoCyWork(index + 1, doms);
+                };
+                setTimeout(adv, 3000);
+            });
+            return;
+        }
+        attempts++;
+        setTimeout(tryParse, 2500);
+    }
+    setTimeout(tryParse, 2000);
 }
 
 function missonWork(dom, obj) {
