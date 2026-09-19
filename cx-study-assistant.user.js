@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name               cx-study-assistant v3.2.33-qb
-// @version            3.2.33
+// @name               cx-study-assistant v3.2.34-qb
+// @version            3.2.34
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -42,6 +42,7 @@ const setting = {
   decrypt: true,       // 字体解密（推荐开启）
   redo: false,         // 重做模式（不跳过已答题）
   fuzzyMatch: true,    // 相似度匹配（精确匹配失败时）
+  checkAnswer: false,  // 答题核对模式：提交后不自动跳转，公布答案后核对并修正题库
 
   // 考试辅助
   examTurn: false,
@@ -452,6 +453,7 @@ function showBox() {
                         <p></p>
  <label><input type="checkbox" id="GPTJsSetting.redo">重做模式 (不跳过已答题)</label>
  <label><input type="checkbox" id="GPTJsSetting.fuzzyMatch" checked>相似度匹配 (答案模糊匹配)</label>
+ <label title="提交测验后不自动跳转，等答题详情页公布答案与分数，自动核对并修正题库（错误答案改为公布的正确答案，置信度标记为'根据答案修改'）"><input type="checkbox" id="GPTJsSetting.checkAnswer">答题核对模式 (提交后核对修正题库)</label>
  <p></p>
  <label title="AI 搜题使用的 API Key，需填写后才能调用 AI 答题" style="display:flex;align-items:center;gap:6px;">
  <input type="password" id="GPTJsSetting.apiKey" class="ne21-select" style="min-width:180px;width:180px;padding:5px 8px;font-size:12px;" placeholder="选填：用其他模型时填写">AI API Key（默认模型免填）
@@ -573,7 +575,7 @@ function showBox() {
                 localStorage.setItem('GPTJsSetting.fuzzyMatch', 'true');
             }
 
-            ['sub', 'force', 'examTurn', 'goodStudent', 'alterTitle', 'redo', 'fuzzyMatch'].forEach(function (settingId) {
+            ['sub', 'force', 'examTurn', 'goodStudent', 'alterTitle', 'redo', 'fuzzyMatch', 'checkAnswer'].forEach(function (settingId) {
                 var checkbox = panelDoc.getElementById('GPTJsSetting.' + settingId);
                 if (!checkbox) return;
                 checkbox.addEventListener('change', updateLocalStorage);
@@ -1299,6 +1301,53 @@ function missonRead(dom, obj) {
     })
 }
 
+function afterSubmitNext($okBtnRef) {
+    // 提交成功后的收尾：默认切下一任务；答题核对模式开启时先核对公布答案再继续
+    var next = function () {
+        _mlist.splice(0, 1);
+        _domList.splice(0, 1);
+        setTimeout(switchMission, 3000);
+    };
+    if (!isCheckAnswerEnabled()) { next(); return; }
+    logger('🔎 答题核对模式开启：提交后暂停跳转，等待答案公布...', 'blue');
+    setTimeout(function () {
+        var doc = null;
+        try {
+            if ($okBtnRef && $okBtnRef[0]) doc = $($okBtnRef[0].ownerDocument);
+        } catch (e) { doc = null; }
+        verifyQuestionBankFromResultPage(doc).then(function () {
+            logger('🔎 核对完成，继续下一任务。', 'green');
+            _mlist.splice(0, 1);
+            _domList.splice(0, 1);
+            setTimeout(switchMission, 3000);
+        });
+    }, 4000);
+}
+
+function afterSubmitNextFrame($frameRef, index, doms) {
+    // PC 版测验提交后的收尾（框架 = iframe 的 document）
+    var next = function () {
+        _mlist.splice(0, 1);
+        _domList.splice(0, 1);
+        setTimeout(function () { startDoCyWork(index + 1, doms) }, 3000);
+    };
+    if (!isCheckAnswerEnabled()) { next(); return; }
+    logger('🔎 答题核对模式开启：提交后暂停跳转，等待答案公布...', 'blue');
+    setTimeout(function () {
+        var doc = null;
+        try {
+            if ($frameRef && $frameRef[0] && $frameRef[0].ownerDocument) doc = $($frameRef[0].ownerDocument);
+            else if ($frameRef && $frameRef.contents && $frameRef.contents().length) doc = $frameRef.contents();
+        } catch (e) { doc = null; }
+        verifyQuestionBankFromResultPage(doc).then(function () {
+            logger('🔎 核对完成，继续下一任务。', 'green');
+            _mlist.splice(0, 1);
+            _domList.splice(0, 1);
+            setTimeout(function () { startDoCyWork(index + 1, doms) }, 3000);
+        });
+    }, 4000);
+}
+
 function missonWork(dom, obj) {
     if (!setting.work) {
         logger('用户设置不自动处理测验，准备处理下一个任务', 'green')
@@ -1353,9 +1402,7 @@ function startDoPhoneTimu(index, TimuList) {
                 setTimeout(() => {
                     $okBtn.click()
                     logger('提交成功，准备切换下一个任务。', 'green')
-                    _mlist.splice(0, 1)
-                    _domList.splice(0, 1)
-                    setTimeout(() => { switchMission() }, 3000)
+                    afterSubmitNext($okBtn)
                 }, 3000)
             }, 5000)
         } else if (localStorage.getItem('GPTJsSetting.force') === 'true') {
@@ -1365,9 +1412,7 @@ function startDoPhoneTimu(index, TimuList) {
                 setTimeout(() => {
                     $okBtn.click()
                     logger('提交成功，准备切换下一个任务。', 'green')
-                    _mlist.splice(0, 1)
-                    _domList.splice(0, 1)
-                    setTimeout(() => { switchMission() }, 3000)
+                    afterSubmitNext($okBtn)
                 }, 3000)
             }, 5000)
         } else {
@@ -3757,6 +3802,127 @@ function tikuSaveAnswer(title, options, type, answer, confidence) {
  } catch(e) {}
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// 答题核对模式 — 提交后不自动跳转，从"答题详情"页抓取公布的正确答案，
+// 与自建题库逐一比对，不同则用公布答案修正题库（置信度标记为"根据答案修改"）
+// ═══════════════════════════════════════════════════════════════════
+
+function isCheckAnswerEnabled() {
+    var v = localStorage.getItem('GPTJsSetting.checkAnswer');
+    if (v !== null) return v === 'true';
+    return false;
+}
+
+// 从 DOM 中提取一题的题干文本(去选项、去题号、去括号题型/分数)
+function extractQuestionTitle($block, typeName) {
+    var title = '';
+    try {
+        title = $block.find('.Py-m1-title').first().text() ||
+                $block.find('.Zy_TItle').first().text() ||
+                $block.find('h3').first().text() ||
+                $block.text() || '';
+    } catch (e) {}
+    return String(title).replace(/&nbsp;/g, '')
+        .replace(/\[.*?题\]\s*\n?\s*/, '')   // 去掉 [单选题] 等
+        .replace(/^\s*\d+[\.、]\s*/, '')      // 去掉题号
+        .replace(/\s*（[\d.]+分）\s*$/, '')    // 去掉分值
+        .replace(/\s+/g, ' ').trim();
+}
+
+// 从一题 block 中抓取"公布的正确答案"文本。策略：查找带 right/正确/答对 标记的元素。
+function extractPublishedCorrectAnswer($block) {
+    var out = '';
+    try {
+        // 常见标记：li.bool / .right / .true / .correct / 或 文本含"正确答案"/"答案："
+        var marked = $block.find('.bool.right, li.right, li.true, li.correct, li.bool, .answerList li, .mark, .correctAnswer, .rightAnswer, .choose_answer');
+        if (marked && marked.length) {
+            var texts = [];
+            marked.each(function (i, el) {
+                var $el = $(el);
+                var hasRight = $el.hasClass('right') || $el.hasClass('true') || $el.hasClass('correct') || $el.hasClass('bool');
+                // 需要带 .right/.true/.correct/.bool 标记，否则不加
+                if (!hasRight) return;
+                texts.push(tidyStr($el.text()).replace(/^[A-Z]\s*[\n.．、]*\s*/, '').trim());
+            });
+            if (texts.length) out = texts.join('#');
+        }
+        if (!out) {
+            // 兜底：text 含 正确答案：
+            var m = $block.text().match(/正确答案\s*[:：]?\s*(.{1,200})/);
+            if (m && m[1]) out = m[1].trim();
+        }
+    } catch (e) {}
+    return out;
+}
+
+// 解析整份"答题详情"结果页，返回题目列表 [{title, options, type, published}]
+function parseAnswerDetailPage($scope) {
+    var questions = [];
+    if (!$scope || !$scope.length) return questions;
+    var $blocks = $scope.find('.Py-mian1, .TiMu, .questionLi, .timuItem');
+    if (!$blocks || !$blocks.length) return questions;
+    $blocks.each(function (i, el) {
+        var $b = $(el);
+        var full = ($b.find('.Py-m1-title').html() || $b.find('.Zy_TItle').html() || $b.html() || '');
+        var typeName = String(full).match(/\[(.*?)\]/);
+        typeName = typeName ? typeName[1] : '';
+        var _type = ({
+            单选: 0, 多选: 1, 填空: 2, 判断: 3, 是非: 3, 简答: 4, 问答: 4, 名词解释: 4, 论述: 4, 计算: 4, 分录: 4, 资料: 4, 作图: 4, 其它: 4, 其他: 4, 阅读理解: 4, 阅读: 4, 完形: 4, 综合: 4, 写作: 5, 翻译: 6
+        })[typeName];
+        var title = extractQuestionTitle($b, typeName);
+        if (!title) return;
+        // options
+        var options = [];
+        $b.find('.answerList li, .singleChoice li, .multiChoice li, .pdSide li, .clearfix li').each(function (i, o) {
+            var t = tidyStr($(o).text()).trim();
+            if (t) options.push(t);
+        });
+        var published = extractPublishedCorrectAnswer($b);
+        questions.push({
+            title: title,
+            options: options,
+            type: _type === undefined ? '' : _type,
+            typeName: typeName || '',
+            published: published
+        });
+    });
+    return questions;
+}
+
+// 主流程：抓到答题详情页后，逐题核对 tiku，不同则修正
+async function verifyQuestionBankFromResultPage($scope) {
+    if (!isCheckAnswerEnabled()) return;
+    var questions = parseAnswerDetailPage($scope);
+    if (!questions.length) {
+        logger('🔎 答题详情页未解析到题目，跳过正确答案核对（可能是详情页结构不同）', 'gray');
+        return;
+    }
+    logger('🔎 答题核对模式：解析到 ' + questions.length + ' 题，开始对比题库...', 'blue');
+    var corrected = 0, matched = 0;
+    for (var i = 0; i < questions.length; i++) {
+        var q = questions[i];
+        if (!q.published) continue;
+        // 构造 payload(复用 buildZePayload)
+        var payload = { question: q.title, options: q.options };
+        var zePayload = buildZePayload(q.type, JSON.stringify(payload), q.title);
+        var res = await zeQuery(zePayload.title, zePayload.options, zePayload.type);
+        if (!res.hit || !res.answer) continue;
+        var storedAns = String(res.answer).replace(/\s*#\s*/g, '#').trim();
+        var pubAnsNorm = String(q.published).replace(/\s*#\s*/g, '#').trim();
+        matched++;
+        if (storedAns !== pubAnsNorm) {
+            // 公布答案与题库不同 → 用公布答案修正题库
+            tikuSaveAnswer(zePayload.title, zePayload.options, zePayload.type, q.published, '根据答案修改');
+            logger('✏️ 第' + (i + 1) + '题 题库答案与公布不同，已修正：〔' + (q.title.length > 28 ? q.title.slice(0, 28) + '…' : q.title) + '〕 ' + storedAns + ' → ' + q.published, 'green');
+            corrected++;
+        } else {
+            logger('✅ 第' + (i + 1) + '题 题库答案与公布一致', 'gray');
+        }
+    }
+    logger('🔎 答案核对完成：共 ' + matched + ' 题命中题库，修正 ' + corrected + ' 题。' + (corrected ? '(已按公布答案更新题库)' : ''), 'green');
+    return corrected;
+}
+
 
 // ═══════════════════════════════════════════════════════════════════
 async function getAnswer(_t, _q, retryCount = 0) {
@@ -4003,9 +4169,7 @@ function startDoWork(index, doms, c, TiMuList) {
                 setTimeout(() => {
                     $frame_c.find('#confirmSubWin > div > div > a.bluebtn').click()
                     logger('提交成功，准备切换下一个任务。', 'green')
-                    _mlist.splice(0, 1)
-                    _domList.splice(0, 1)
-                    setTimeout(() => { startDoCyWork(index + 1, doms) }, 3000)
+                    afterSubmitNextFrame($frame_c, index, doms)
                 }, 3000)
             }, 5000)
         } else if (localStorage.getItem('GPTJsSetting.force') === 'true') {
@@ -4015,9 +4179,7 @@ function startDoWork(index, doms, c, TiMuList) {
                 setTimeout(() => {
                     $frame_c.find('#confirmSubWin > div > div > a.bluebtn').click()
                     logger('提交成功，准备切换下一个任务。', 'green')
-                    _mlist.splice(0, 1)
-                    _domList.splice(0, 1)
-                    setTimeout(() => { startDoCyWork(index + 1, doms) }, 3000)
+                    afterSubmitNextFrame($frame_c, index, doms)
                 }, 3000)
             }, 5000)
         } else {
