@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name               cx-study-assistant v3.2.38-qb
-// @version            3.2.38
+// @name               cx-study-assistant v3.2.39-qb
+// @version            3.2.39
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -1372,7 +1372,12 @@ function verifyCompletedQuizThenContinue(index, doms, phoneWeb, workIframe, isPh
             else if (workIframe && workIframe.ownerDocument) doc = $(workIframe.ownerDocument);
         } catch (e) { doc = null; }
         var hasContent = false;
-        try { hasContent = doc && doc.length && (doc.find('.Py-mian1').length || doc.find('.TiMu').length); } catch (e) {}
+        try {
+            if (doc && doc.length) {
+                var $deep = deepenWorkDoc(doc);
+                hasContent = $deep.length && ($deep.find('.Py-mian1').length || $deep.find('.TiMu').length);
+            }
+        } catch (e) {}
         if (hasContent || attempts >= maxAttempts) {
             verifyQuestionBankFromResultPage(doc).then(function () {
                 logger('🔎 核对完成，继续下一任务。', 'green');
@@ -3870,7 +3875,15 @@ function extractQuestionTitle($block, typeName) {
                 $block.find('h3').first().text() ||
                 $block.text() || '';
     } catch (e) {}
-    return String(title).replace(/&nbsp;/g, '')
+    var cleaned = String(title).replace(/&nbsp;/g, '').replace(/\u200B/g, '');
+    // 去掉题型标记：【单选题】 / [单选题] / [Single Choice]（新旧两种括号）
+    var hadTypeMark = false;
+    cleaned = cleaned.replace(/[【\[]\s*[^【】\[\]]*?\s*[】\]]/, function () { hadTypeMark = true; return ' '; });
+    if (hadTypeMark) {
+        // 新版题型序号是独立 <i> 渲染（如 "1【Single Choice】xxx"），紧邻题型标记的孤立题号直接去
+        cleaned = cleaned.replace(/^\s*\d+\s*/, '');
+    }
+    return cleaned
         .replace(/\[.*?题\]\s*\n?\s*/, '')   // 去掉 [单选题] 等
         .replace(/^\s*\d+[\.、]\s*/, '')      // 去掉题号
         .replace(/\s*（[\d.]+分）\s*$/, '')    // 去掉分值
@@ -3881,6 +3894,20 @@ function extractQuestionTitle($block, typeName) {
 function extractPublishedCorrectAnswer($block) {
     var out = '';
     try {
+        // 新版已批阅页(mooc2)：答错 → .correctAnswerBx .correctAnswer .answerCon（"Right answer：B"）
+        var $ca = $block.find('.correctAnswerBx .correctAnswer .answerCon').first();
+        if ($ca && $ca.length) {
+            var t = tidyStr($ca.text()).trim();
+            if (t) out = t;
+        }
+        // 答对(dui/半对bandui)不展示正确答案 → My Answer 即公布答案（同样可核对修正题库）
+        if (!out && $block.find('.marking_dui, .marking_bandui').length) {
+            var $ma = $block.find('.myAnswerBx .myAnswer .answerCon').first();
+            if ($ma && $ma.length) {
+                var mt = tidyStr($ma.text()).trim();
+                if (mt) out = mt;
+            }
+        }
         // 常见标记：li.bool / .right / .true / .correct / 或 文本含"正确答案"/"答案："
         var marked = $block.find('.bool.right, li.right, li.true, li.correct, li.bool, .answerList li, .mark, .correctAnswer, .rightAnswer, .choose_answer');
         if (marked && marked.length) {
@@ -3912,16 +3939,17 @@ function parseAnswerDetailPage($scope) {
     $blocks.each(function (i, el) {
         var $b = $(el);
         var full = ($b.find('.Py-m1-title').html() || $b.find('.Zy_TItle').html() || $b.html() || '');
-        var typeName = String(full).match(/\[(.*?)\]/);
-        typeName = typeName ? typeName[1] : '';
+        var typeName = String(full).match(/[【\[](.*?)[】\]]/);   // 兼容【单选题】和 [Single Choice]
+        typeName = typeName ? typeName[1].trim() : '';
         var _type = ({
-            单选: 0, 多选: 1, 填空: 2, 判断: 3, 是非: 3, 简答: 4, 问答: 4, 名词解释: 4, 论述: 4, 计算: 4, 分录: 4, 资料: 4, 作图: 4, 其它: 4, 其他: 4, 阅读理解: 4, 阅读: 4, 完形: 4, 综合: 4, 写作: 5, 翻译: 6
+            单选: 0, 多选: 1, 填空: 2, 判断: 3, 是非: 3, 简答: 4, 问答: 4, 名词解释: 4, 论述: 4, 计算: 4, 分录: 4, 资料: 4, 作图: 4, 其它: 4, 其他: 4, 阅读理解: 4, 阅读: 4, 完形: 4, 综合: 4, 写作: 5, 翻译: 6,
+            'Single Choice': 0, 'Multiple Choice': 1, 'Fill in the blank': 2, 'Fill in Blank': 2, 'True or false': 3, 'True or False': 3, 'Judgment': 3, 'Short answer': 4, 'Short Answer': 4, 'Essay': 4, 'Comprehensive': 4
         })[typeName];
         var title = extractQuestionTitle($b, typeName);
         if (!title) return;
         // options
         var options = [];
-        $b.find('.answerList li, .singleChoice li, .multiChoice li, .pdSide li, .clearfix li').each(function (i, o) {
+        $b.find('.Zy_ulTop li, .answerList li, .singleChoice li, .multiChoice li, .pdSide li, .clearfix li').each(function (i, o) {
             var t = tidyStr($(o).text()).trim();
             if (t) options.push(t);
         });
@@ -3937,9 +3965,30 @@ function parseAnswerDetailPage($scope) {
     return questions;
 }
 
+// 测验题面在多层嵌套 iframe 里：外层任务 iframe → ananas 壳(ananas/modules/work/index.html，只有弹窗模板)
+// → #frame_content(/mooc-ans/api/work?api=1&workId=...，真正的题面)。
+// 传入的 doc 若是壳层(本层无题目容器)，则钻到题面层；本层已有题面则原样返回。
+function deepenWorkDoc($doc) {
+    try {
+        if (!$doc || !$doc.length) return $doc;
+        if ($doc.find('.TiMu, .Py-mian1, .questionLi, .timuItem').length) return $doc;
+        var $fc = $doc.find('#frame_content');
+        if ($fc.length && $fc.contents && $fc.contents().length) return $fc.contents();
+        var $subs = $doc.find('iframe');
+        for (var i = 0; i < $subs.length; i++) {
+            try {
+                var $c = $($subs[i].contentDocument);
+                if ($c.length && $c.find('.TiMu, .Py-mian1, .questionLi, .timuItem').length) return $c;
+            } catch (e) {}
+        }
+    } catch (e) {}
+    return $doc;
+}
+
 // 主流程：抓到答题详情页后，逐题核对 tiku，不同则修正
 async function verifyQuestionBankFromResultPage($scope) {
     if (!isCheckAnswerEnabled()) return;
+    $scope = deepenWorkDoc($scope);
     var questions = parseAnswerDetailPage($scope);
     if (!questions.length) {
         // 诊断：打印已完成测验页的实际结构，便于调整选择器（不依赖控制台，直接进浮窗日志）
