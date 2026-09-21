@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name               cx-study-assistant v3.2.42-qb
-// @version            3.2.42
+// @name               cx-study-assistant v3.2.43-qb
+// @version            3.2.43
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -4027,6 +4027,23 @@ function buildPhoneWebFromIframe(workIframe) {
     } catch (e) { return ''; }
 }
 
+// 公布答案(字母如 B / ABC，或已是文本) → 选项文本，与题库保存格式一致（防选项换位错位）
+function publishedToOptionText(pub, options) {
+    var s = String(pub || '').trim();
+    if (!s) return s;
+    if (!/^[A-Za-z#、,，\s]+$/.test(s)) return s;   // 已是文本，原样返回
+    var letters = s.split(/[#,、,，\s]+/).join('').split('');
+    var texts = [];
+    for (var i = 0; i < letters.length; i++) {
+        var L = letters[i].toUpperCase();
+        var idx = L.charCodeAt(0) - 65;   // A=0
+        var opt = (options && options[idx] != null) ? String(options[idx]) : '';
+        opt = opt.replace(/^[A-Za-z]\s*[.．、:：]?\s*/, '').trim();
+        texts.push(opt || L);
+    }
+    return texts.join('#');
+}
+
 // 主流程：抓到答题详情页后，逐题核对 tiku，不同则修正
 async function verifyQuestionBankFromResultPage($scope) {
     if (!isCheckAnswerEnabled()) return;
@@ -4082,12 +4099,14 @@ async function verifyQuestionBankFromResultPage($scope) {
             continue;
         }
         var storedAns = String(res.answer).replace(/\s*#\s*/g, '#').trim();
-        var pubAnsNorm = String(q.published).replace(/\s*#\s*/g, '#').trim();
+        // 公布答案(字母) → 选项文本，与题库保存格式一致（防选项换位错位）
+        var pubText = publishedToOptionText(q.published, q.options);
+        var pubAnsNorm = String(pubText).replace(/\s*#\s*/g, '#').trim();
         matched++;
         if (storedAns !== pubAnsNorm) {
-            // 公布答案与题库不同 → 用公布答案修正题库
-            tikuSaveAnswer(zePayload.title, zePayload.options, zePayload.type, q.published, '根据答案修改');
-            logger('✏️ 第' + (i + 1) + '题 题库答案与公布不同，已修正：〔' + (q.title.length > 28 ? q.title.slice(0, 28) + '…' : q.title) + '〕 ' + storedAns + ' → ' + q.published, 'green');
+            // 公布答案与题库不同 → 用公布答案(选项文本)修正题库
+            tikuSaveAnswer(zePayload.title, zePayload.options, zePayload.type, pubText, '根据答案修改');
+            logger('✏️ 第' + (i + 1) + '题 题库答案与公布不同，已修正：〔' + (q.title.length > 28 ? q.title.slice(0, 28) + '…' : q.title) + '〕 ' + storedAns + ' → ' + pubText, 'green');
             corrected++;
         } else {
             logger('✅ 第' + (i + 1) + '题 题库答案与公布一致', 'gray');
