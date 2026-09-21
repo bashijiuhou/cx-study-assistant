@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name               cx-study-assistant v3.2.39-qb
-// @version            3.2.39
+// @name               cx-study-assistant v3.2.40-qb
+// @version            3.2.40
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -4025,15 +4025,20 @@ async function verifyQuestionBankFromResultPage($scope) {
         return;
     }
     logger('🔎 答题核对模式：解析到 ' + questions.length + ' 题，开始对比题库...', 'blue');
-    var corrected = 0, matched = 0;
+    var corrected = 0, matched = 0, noPub = 0, miss = 0;
     for (var i = 0; i < questions.length; i++) {
         var q = questions[i];
-        if (!q.published) continue;
+        if (!q.published) { noPub++; continue; }
         // 构造 payload(复用 buildZePayload)
         var payload = { question: q.title, options: q.options };
         var zePayload = buildZePayload(q.type, JSON.stringify(payload), q.title);
         var res = await zeQuery(zePayload.title, zePayload.options, zePayload.type);
-        if (!res.hit || !res.answer) continue;
+        if (!res.hit || !res.answer) {
+            // 失败诊断：打印原因(网络/超时/token/API msg) + 题干前段，便于定位（前8条防刷屏）
+            miss++;
+            if (miss <= 8) logger('⚠️ 第' + (i + 1) + '题 题库未命中[' + (res.msg || '未知') + '] type=' + zePayload.type + '：' + (q.title.length > 40 ? q.title.slice(0, 40) + '…' : q.title), 'yellow');
+            continue;
+        }
         var storedAns = String(res.answer).replace(/\s*#\s*/g, '#').trim();
         var pubAnsNorm = String(q.published).replace(/\s*#\s*/g, '#').trim();
         matched++;
@@ -4046,7 +4051,7 @@ async function verifyQuestionBankFromResultPage($scope) {
             logger('✅ 第' + (i + 1) + '题 题库答案与公布一致', 'gray');
         }
     }
-    logger('🔎 答案核对完成：共 ' + matched + ' 题命中题库，修正 ' + corrected + ' 题。' + (corrected ? '(已按公布答案更新题库)' : ''), 'green');
+    logger('🔎 答案核对完成：共 ' + matched + ' 题命中题库，修正 ' + corrected + ' 题，未命中 ' + miss + ' 题，无公布答案 ' + noPub + ' 题。' + (corrected ? '(已按公布答案更新题库)' : (miss ? '(未命中原因见上方⚠️日志)' : '')), (miss && !matched) ? 'orange' : 'green');
     return corrected;
 }
 
