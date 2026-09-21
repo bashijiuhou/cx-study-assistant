@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name               cx-study-assistant v3.2.40-qb
-// @version            3.2.40
+// @name               cx-study-assistant v3.2.41-qb
+// @version            3.2.41
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -3677,7 +3677,7 @@ function buildZePayload(_t, _payload, _display) {
         // 兼容旧字符串调用：无法解析时使用 display/payload 作为题干，options 留空
     }
     return {
-        title: String(title || '').trim(),
+        title: String(title || '').replace(/^\s*[\.、]\s*/, '').trim(),   // 题号 "1." 渲染残留的 ". " 会破坏题库精确匹配，统一去
         options: String(options || '').trim(),
         type: String(_t)
     };
@@ -3882,6 +3882,8 @@ function extractQuestionTitle($block, typeName) {
     if (hadTypeMark) {
         // 新版题型序号是独立 <i> 渲染（如 "1【Single Choice】xxx"），紧邻题型标记的孤立题号直接去
         cleaned = cleaned.replace(/^\s*\d+\s*/, '');
+        // 题号渲染为 "1." / "1、" 时上一条只去数字，只剩 ". " 残留 → 一并去掉
+        cleaned = cleaned.replace(/^\s*[\.、]\s*/, '');
     }
     return cleaned
         .replace(/\[.*?题\]\s*\n?\s*/, '')   // 去掉 [单选题] 等
@@ -3942,7 +3944,7 @@ function parseAnswerDetailPage($scope) {
         var typeName = String(full).match(/[【\[](.*?)[】\]]/);   // 兼容【单选题】和 [Single Choice]
         typeName = typeName ? typeName[1].trim() : '';
         var _type = ({
-            单选: 0, 多选: 1, 填空: 2, 判断: 3, 是非: 3, 简答: 4, 问答: 4, 名词解释: 4, 论述: 4, 计算: 4, 分录: 4, 资料: 4, 作图: 4, 其它: 4, 其他: 4, 阅读理解: 4, 阅读: 4, 完形: 4, 综合: 4, 写作: 5, 翻译: 6,
+            单选: 0, 单选题: 0, 多选: 1, 多选题: 1, 填空: 2, 填空题: 2, 判断: 3, 判断题: 3, 是非: 3, 是非题: 3, 简答: 4, 简答题: 4, 问答: 4, 问答题: 4, 名词解释: 4, 论述: 4, 论述题: 4, 计算: 4, 计算题: 4, 分录: 4, 资料: 4, 作图: 4, 其它: 4, 其他: 4, 阅读理解: 4, 阅读: 4, 完形: 4, 完形填空: 4, 综合: 4, 综合题: 4, 写作: 5, 写作题: 5, 翻译: 6, 翻译题: 6,
             'Single Choice': 0, 'Multiple Choice': 1, 'Fill in the blank': 2, 'Fill in Blank': 2, 'True or false': 3, 'True or False': 3, 'Judgment': 3, 'Short answer': 4, 'Short Answer': 4, 'Essay': 4, 'Comprehensive': 4
         })[typeName];
         var title = extractQuestionTitle($b, typeName);
