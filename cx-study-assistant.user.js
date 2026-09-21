@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name               cx-study-assistant v3.2.41-qb
-// @version            3.2.41
+// @name               cx-study-assistant v3.2.42-qb
+// @version            3.2.42
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -1357,6 +1357,15 @@ function verifyCompletedQuizThenContinue(index, doms, phoneWeb, workIframe, isPh
     // 手机版：把已完成测验 iframe 加载为 phoneWeb 详情页（与重做模式同款入口，会显示题目+答案）
     if (isPhone && phoneWeb) {
         try { $(workIframe).attr('src', phoneWeb); } catch (e) {}
+    } else if (!isPhone && workIframe) {
+        // PC 版：壳 iframe 停留在已提交空壳，需主动换成 phone 详情页再轮询（修复 PC 核对解析不到题目）
+        var pw = buildPhoneWebFromIframe(workIframe);
+        if (pw) {
+            logger('🔎 PC 核对：已构造详情页地址，加载中...', 'blue');
+            try { $(workIframe).attr('src', pw); } catch (e) {}
+        } else {
+            logger('⚠️ PC 核对：无法从 iframe src 提取 workId，跳过详情页加载', 'yellow');
+        }
     }
     var attempts = 0, maxAttempts = 6;
     function tryParse() {
@@ -3985,6 +3994,37 @@ function deepenWorkDoc($doc) {
         }
     } catch (e) {}
     return $doc;
+}
+
+// PC 版：已完成测验的壳 iframe 不会自己显示详情页，需像手机版一样换成 phone 详情页。
+// 参数从壳层 src / 内层 #frame_content src 提取（workId/courseId/clazzId/knowledgeId/jobId/enc）。
+function buildPhoneWebFromIframe(workIframe) {
+    try {
+        if (!workIframe || !workIframe.length) return '';
+        var sources = [String($(workIframe).attr('src') || '')];
+        try {
+            var $fc = $(workIframe).contents().find('#frame_content');
+            if ($fc.length) sources.push(String($fc.attr('src') || ''));
+        } catch (e) {}
+        var params = {};
+        for (var s = 0; s < sources.length; s++) {
+            var qs = sources[s].split('?')[1] || '';
+            var kvs = qs.split('&');
+            for (var k = 0; k < kvs.length; k++) {
+                var p = kvs[k].split('=');
+                if (p.length >= 2 && p[0]) params[p[0]] = p.slice(1).join('=');
+            }
+        }
+        var jobId = params['jobId'] || params['jobid'] || '';
+        var workId = params['workId'] || params['workid'] || jobId.replace('work-', '');
+        if (!workId || workId === 'work-') return '';
+        return _l.protocol + '//' + _l.host + '/work/phone/work?workId=' + workId
+            + '&courseId=' + (params['courseId'] || params['courseid'] || (_defaults && _defaults['courseid']) || '')
+            + '&clazzId=' + (params['clazzId'] || params['clazzid'] || (_defaults && _defaults['clazzId']) || '')
+            + '&knowledgeId=' + (params['knowledgeId'] || params['knowledgeid'] || (_defaults && _defaults['knowledgeid']) || '')
+            + '&jobId=' + (jobId || ('work-' + workId))
+            + '&enc=' + (params['enc'] || '');
+    } catch (e) { return ''; }
 }
 
 // 主流程：抓到答题详情页后，逐题核对 tiku，不同则修正
