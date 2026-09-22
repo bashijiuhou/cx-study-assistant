@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name               cx-study-assistant v3.2.43-qb
-// @version            3.2.45
+// @version            3.2.46
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -4182,7 +4182,19 @@ async function getAnswer(_t, _q, retryCount = 0) {
                         if (Array.isArray(_pObj.options)) _optTexts = _pObj.options.map(function(o){return String(o||'').trim()});
                     } catch(e){}
                     if (_optTexts.length > 0) {
-                        var _bestIdx = findBestFuzzyMatch(_optTexts, zeHitAnswer, 0.4);
+                        var _bestIdx;
+                        if (String(_t) === '1') {
+                            // 多选题：题库答案是 # 分隔的多段，逐段在选项中找匹配，任一段命中即用题库答案
+                            // （整串 vs 单个选项的相似度必然低，会误判回退AI）
+                            var _parts = zeHitAnswer.split('#');
+                            var _anyHit = false;
+                            for (var _pi = 0; _pi < _parts.length; _pi++) {
+                                if (_parts[_pi].trim() && findBestFuzzyMatch(_optTexts, _parts[_pi].trim(), 0.4) >= 0) { _anyHit = true; break; }
+                            }
+                            _bestIdx = _anyHit ? 0 : -1;
+                        } else {
+                            _bestIdx = findBestFuzzyMatch(_optTexts, zeHitAnswer, 0.4);
+                        }
                         if (_bestIdx >= 0) {
                             return zeHitAnswer; // 匹配成功，直接用 Ze 答案
                         }
