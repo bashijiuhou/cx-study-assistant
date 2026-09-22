@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name               cx-study-assistant v3.2.43-qb
-// @version            3.2.43
+// @version            3.2.44
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -3820,7 +3820,9 @@ function zeQuery(title, options, type) {
  if (typeof answer === 'string') answer = answer.trim();
  // 统一多选分隔符：| → #
  answer = answer.replace(/\s*\|\s*/g, '#');
- if (answer && !/解析失败|请求体|未找到|不存在|error|错误/i.test(answer)) {
+ // 判断题合法答案白名单：对/错/正确/错误 本身就是答案，不能被异常词黑名单误杀
+ var isJudgmentAnswer = /^(对|错|正确|错误|√|×|T|F|true|false|正确答案|错误答案)$/i.test(answer.trim());
+ if (answer && (isJudgmentAnswer || !/解析失败|请求体|未找到|不存在|error|错误/i.test(answer))) {
  resolve({hit: true, answer: answer});
  } else {
  resolve({hit: false, msg: '未找到答案'});
