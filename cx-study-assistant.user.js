@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name               cx-study-assistant v3.2.43-qb
-// @version            3.2.44
+// @version            3.2.45
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -4098,6 +4098,12 @@ async function verifyQuestionBankFromResultPage($scope) {
             // 失败诊断：打印原因(网络/超时/token/API msg) + 题干前段，便于定位（前8条防刷屏）
             miss++;
             if (miss <= 8) logger('⚠️ 第' + (i + 1) + '题 题库未命中[' + (res.msg || '未知') + '] type=' + zePayload.type + '：' + (q.title.length > 40 ? q.title.slice(0, 40) + '…' : q.title), 'yellow');
+            // 未命中但有公布答案 → 自动入库（新增题目），下次查询即可命中
+            var pubTextNew = publishedToOptionText(q.published, q.options);
+            if (pubTextNew && zePayload.title) {
+                tikuSaveAnswer(zePayload.title, zePayload.options, zePayload.type, pubTextNew, '根据答案修改');
+                logger('📥 第' + (i + 1) + '题 题库未命中，已按公布答案入库：〔' + (q.title.length > 28 ? q.title.slice(0, 28) + '…' : q.title) + '〕 → ' + pubTextNew, 'blue');
+            }
             continue;
         }
         var storedAns = String(res.answer).replace(/\s*#\s*/g, '#').trim();
