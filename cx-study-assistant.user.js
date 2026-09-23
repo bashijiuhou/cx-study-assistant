@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name               cx-study-assistant v3.2.43-qb
-// @version            3.2.48
+// @name               cx-study-assistant
+// @version            3.3.0
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -94,6 +94,15 @@ $('.navshow').find('a:contains(体验新版)')[0] ? $('.navshow').find('a:contai
 
 setting.decrypt ? decryptFont() : '';
 
+// ── Frame 白名单守卫 ─────────────────────────────────────────────
+// 超星页面重度 iframe 化：功能页（答题/考试/课件）大多在 iframe 内运行，
+// 因此不能用 @noframes（会废掉功能）。这里只放行已知功能路由的 frame，
+// 其余 frame 直接退出，避免重复面板 / 重复 AI 请求 / 重复写题库。
+var _ne21RunRoutes = ['/login', '/mycourse/studentstudy', '/knowledge/cards', '/exam/test/reVersionTestStartNew', '/mooc2/exam/preview', '/mooc2/work/dowork', '/work/phone/doHomeWork'];
+if (!_ne21RunRoutes.some(function (p) { return _l.pathname.includes(p); })) {
+    return; // 非功能 frame，直接退出（油猴管理器包裹脚本，支持顶层 return）
+}
+
 function waitForJQueryElement(selector) {
     return new Promise(function (resolve) {
         var interval = setInterval(function () {
@@ -103,10 +112,6 @@ function waitForJQueryElement(selector) {
             }
         }, 500);
     });
-}
-
-if (_l.hostname == 'i.mooc.chaoxing.com' || _l.hostname == "i.chaoxing.com") {
-    // 这些域名也有课程页面需求，不提前阻断，继续交给下面路径判断处理
 }
 
 if (_l.pathname == '/login' && setting.autoLogin) {
@@ -163,20 +168,6 @@ if (_l.pathname == '/login' && setting.autoLogin) {
             return true
         }
         return _oldcf(msg)
-    }
-} else if (_l.pathname.includes('/mooc2/exam/exam-list')) {
-    // Swal.fire('ChatGPT学习通助手提示', '注意：请谨慎使用脚本考试，开始考试之前请确保该账号已激活脚本。', 'info')
-} else if (_l.pathname == '/mycourse/stu') {
-    checkBrowser()
-} else {
-    // console.log(_l.pathname)
-}
-
-function checkBrowser() {
-    var userAgent = navigator.userAgent
-    if (userAgent.indexOf('Chrome') == -1 || GM_info.scriptHandler != 'ScriptCat') {
-        // 非推荐环境，但不弹出警告
-        // Swal.fire('您使用的不是推荐运行环境(edge、谷歌浏览器+ScriptCat)，脚本运行可能会发生问题.')
     }
 }
 
@@ -833,8 +824,6 @@ function toNext() {
             } else if (t['status'].indexOf('开放') != -1) {
                 logger('章节未开放', 'red')
                 return
-            } else {
-                //  console.log(t)
             }
         }
         logger('此课程处理完毕', 'green')
@@ -3759,9 +3748,6 @@ function clearQuestionBank() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-
-
-// ═══════════════════════════════════════════════════════════════════
 // Ze 题库集成
 // ═══════════════════════════════════════════════════════════════════
 
@@ -4310,7 +4296,6 @@ var _modelCompat = { 'z-ai/glm-5.1': 'nvidia/nemotron-3-super-120b-a12b', 'glm-4
  resolve(_answer)
                         } else {
                             updateLogEntry($thinkingLog, 'AI返回空答案', 'red')
-                            localStorage.setItem('GPTJsSetting.sub', false)
                             reject({ 'c': 0 })
                         }
                     } catch (e) {
@@ -4320,12 +4305,18 @@ var _modelCompat = { 'z-ai/glm-5.1': 'nvidia/nemotron-3-super-120b-a12b', 'glm-4
                 } else if (xhr.status == 401) {
                     updateLogEntry($thinkingLog, 'API认证失败，请检查API Key配置', 'red')
                     reject({ 'c': 401 })
-                } else if (xhr.status == 429) {
-                    updateLogEntry($thinkingLog, '请求过于频繁，请稍后再试', 'red')
-                    reject({ 'c': 429 })
-                } else if (xhr.status == 500) {
-                    updateLogEntry($thinkingLog, 'AI服务器压力过大，请先保存答案后刷新重试', 'red')
-                    reject({ 'c': 500 })
+                } else if (xhr.status == 429 || xhr.status == 500 || xhr.status == 503) {
+                    // 429/500/503 多为上游限流，退避重试而非直接放弃
+                    if (retryCount < 3) {
+                        var _backoffMs = [2000, 5000, 10000][Math.min(retryCount, 2)];
+                        updateLogEntry($thinkingLog, '服务器繁忙(' + xhr.status + ')，' + (_backoffMs / 1000) + 's 后自动重试（第' + (retryCount + 2) + '/4 次）...', 'orange')
+                        setTimeout(function () {
+                            getAnswer(_t, _q, retryCount + 1).then(resolve).catch(reject)
+                        }, _backoffMs);
+                    } else {
+                        updateLogEntry($thinkingLog, '重试次数已用尽（持续返回 ' + xhr.status + '），跳过此题', 'red')
+                        reject({ 'c': xhr.status })
+                    }
                 } else if (xhr.status == 403) {
                     updateLogEntry($thinkingLog, '请求被拒绝(403)，可能是余额不足', 'red')
                     reject({ 'c': 403 })
@@ -4339,8 +4330,16 @@ var _modelCompat = { 'z-ai/glm-5.1': 'nvidia/nemotron-3-super-120b-a12b', 'glm-4
                 if (requestCompleted) return;
                 requestCompleted = true;
                 clearTimeout(longWaitTimer);
-                updateLogEntry($thinkingLog, '请求超时(120s)', 'red')
-                reject({ 'c': 666 })
+                if (retryCount < 3) {
+                    var _backoffMs = [2000, 5000, 10000][Math.min(retryCount, 2)];
+                    updateLogEntry($thinkingLog, '请求超时(120s)，' + (_backoffMs / 1000) + 's 后自动重试（第' + (retryCount + 2) + '/4 次）...', 'orange')
+                    setTimeout(function () {
+                        getAnswer(_t, _q, retryCount + 1).then(resolve).catch(reject)
+                    }, _backoffMs);
+                } else {
+                    updateLogEntry($thinkingLog, '重试次数已用尽（超时），跳过此题', 'red')
+                    reject({ 'c': 666 })
+                }
             }
         });
         }, _waitMs);
