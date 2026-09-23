@@ -420,7 +420,7 @@ function showBox() {
         var box_html = `
             <div id="ne-21box">
                 <div class="ne21-header" title="按住标题栏可拖动 / 点击右侧按钮收起">
-                    <h3 class="ne21-title"><span class="ne21-dot"></span>ChatGPT 学习通助手</h3>
+                    <h3 class="ne21-title"><span class="ne21-dot"></span>学习通 AI 答题助手</h3>
                     <button id="ne-21close" type="button" aria-label="收起">−</button>
                 </div>
                 <div class="ne21-body">
