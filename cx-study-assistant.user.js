@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name               cx-study-assistant v3.2.43-qb
-// @version            3.2.47
+// @version            3.2.48
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
