@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name               cx-study-assistant v3.2.43-qb
-// @version            3.2.46
+// @version            3.2.47
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -359,73 +359,61 @@ function showBox() {
             var styleEl = panelDoc.createElement('style');
             styleEl.id = 'ne-21style';
             styleEl.textContent = `
-            /* === Liquid Glass UI (iOS 26 style, neutral light glass) === */
-            #ne-21box{position:fixed;top:5%;right:16%;width:340px;z-index:99999;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:13px;color:rgba(15,23,42,.86);background:linear-gradient(180deg,rgba(255,255,255,.62) 0%,rgba(241,245,249,.55) 100%);backdrop-filter:blur(22px) saturate(180%) brightness(1.04);-webkit-backdrop-filter:blur(22px) saturate(180%) brightness(1.04);border:1px solid rgba(255,255,255,.65);border-radius:22px;box-shadow:0 0 0 1px rgba(15,23,42,.09),0 24px 48px -12px rgba(15,23,42,.45),0 10px 26px -8px rgba(15,23,42,.3),inset 0 1px 0 rgba(255,255,255,.9),inset 0 -1px 0 rgba(15,23,42,.06);overflow:hidden;transition:opacity .25s ease,transform .25s ease;animation:ne21-in .4s cubic-bezier(.2,.9,.3,1) both;}
-            @keyframes ne21-in{from{opacity:0;transform:translateY(-8px) scale(.98)}to{opacity:1;transform:none}}
-            #ne-21box .ne21-header{position:relative;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:linear-gradient(180deg,rgba(255,255,255,.72) 0%,rgba(248,250,252,.35) 100%);color:rgba(15,23,42,.92);border-bottom:1px solid rgba(15,23,42,.07);cursor:move;user-select:none;}
-            #ne-21box .ne21-header::after{content:'';position:absolute;left:14px;right:14px;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.85),transparent);pointer-events:none;}
-            #ne-21box.ne21-collapsed .ne21-body{display:none;}
-            #ne-21box.ne21-collapsed .ne21-header{border-bottom:none;}
-            #ne-21box.ne21-collapsed .ne21-header::after{display:none;}
-            #ne-21box .ne21-title{display:flex;align-items:center;gap:9px;font-weight:600;font-size:14px;letter-spacing:.3px;margin:0;color:inherit;}
-            #ne-21box .ne21-dot{width:9px;height:9px;border-radius:50%;background:radial-gradient(circle at 32% 28%,rgba(255,255,255,.98),rgba(255,255,255,.5) 55%,rgba(15,23,42,.18) 100%);box-shadow:0 0 0 0 rgba(255,255,255,.7),inset 0 1px 1px rgba(255,255,255,.95);animation:ne21-pulse 2s infinite;flex-shrink:0;}
-            @keyframes ne21-pulse{0%{box-shadow:0 0 0 0 rgba(255,255,255,.7),inset 0 1px 1px rgba(255,255,255,.95)}70%{box-shadow:0 0 0 8px rgba(255,255,255,0),inset 0 1px 1px rgba(255,255,255,.95)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0),inset 0 1px 1px rgba(255,255,255,.95)}}
-            #ne-21box #ne-21close{margin:0;width:24px;height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;line-height:1;color:rgba(15,23,42,.7);cursor:pointer;border:1px solid rgba(255,255,255,.65);border-radius:50%;background:rgba(255,255,255,.55);box-shadow:0 0 0 1px rgba(15,23,42,.06),inset 0 1px 0 rgba(255,255,255,.8),0 1px 2px rgba(15,23,42,.08);transition:background .2s,color .2s,transform .15s;user-select:none;font-family:inherit;}
-            #ne-21box #ne-21close:hover{background:rgba(255,255,255,.78);color:rgba(15,23,42,.92);box-shadow:0 0 0 1px rgba(15,23,42,.08),inset 0 1px 0 rgba(255,255,255,.9),0 1px 2px rgba(15,23,42,.1);}
-            #ne-21box #ne-21close:active{transform:scale(.92);}
-            #ne-21box .ne21-body{padding:14px 16px 16px;}
-            #ne-21box #ne-21notice{border-top:none!important;margin:0 0 6px!important;overflow:visible;}
-            #ne-21box .ne21-uid{display:flex;align-items:center;gap:6px;color:rgba(15,23,42,.62);font-size:12px;margin-bottom:10px;padding:8px 12px;background:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.7);border-radius:12px;box-shadow:0 0 0 1px rgba(15,23,42,.05),inset 0 1px 0 rgba(255,255,255,.75),0 1px 2px rgba(15,23,42,.05);}
-            #ne-21box .ne21-uid b{color:rgba(15,23,42,.92);font-weight:600;}
-            #ne-21box .ne21-row{display:flex;gap:8px;align-items:center;}
-            #ne-21box .ne21-btn{display:inline-flex;align-items:center;justify-content:center;padding:7px 14px;font-size:12px;font-weight:500;border-radius:14px;cursor:pointer;border:1px solid rgba(255,255,255,.7);transition:transform .15s,box-shadow .2s,background .2s,color .2s;white-space:nowrap;}
-            #ne-21box .ne21-btn-primary{color:rgba(15,23,42,.92);background:rgba(255,255,255,.72);box-shadow:0 0 0 1px rgba(15,23,42,.07),inset 0 1px 0 rgba(255,255,255,.95),inset 0 -6px 12px -6px rgba(15,23,42,.08),0 4px 10px -2px rgba(15,23,42,.22);}
-            #ne-21box .ne21-btn-primary:hover{transform:translateY(-1px);background:rgba(255,255,255,.88);box-shadow:0 0 0 1px rgba(15,23,42,.09),inset 0 1px 0 rgba(255,255,255,1),inset 0 -6px 12px -6px rgba(15,23,42,.1),0 6px 14px -2px rgba(15,23,42,.28);}
-            #ne-21box .ne21-btn-secondary{color:rgba(15,23,42,.78);background:rgba(255,255,255,.45);box-shadow:0 0 0 1px rgba(15,23,42,.06),inset 0 1px 0 rgba(255,255,255,.75),0 1px 2px rgba(15,23,42,.06);}
-            #ne-21box .ne21-btn-secondary:hover{background:rgba(255,255,255,.65);color:rgba(15,23,42,.92);box-shadow:0 0 0 1px rgba(15,23,42,.08),inset 0 1px 0 rgba(255,255,255,.85),0 2px 4px rgba(15,23,42,.08);}
-            #ne-21box .ne21-btn:active{transform:translateY(0) scale(.98);}
-            #ne-21box .ne21-btn-small{padding:5px 10px;font-size:11px;border-radius:11px;}
-            #ne-21box .ne21-input{box-sizing:border-box;width:100%;padding:6px 9px;font-size:12px;border-radius:10px;border:1px solid rgba(255,255,255,.65);background:rgba(255,255,255,.5);color:rgba(15,23,42,.86);outline:none;box-shadow:0 0 0 1px rgba(15,23,42,.05),inset 0 1px 0 rgba(255,255,255,.75);}
-            #ne-21box .ne21-input:focus{background:rgba(255,255,255,.72);box-shadow:0 0 0 1px rgba(15,23,42,.08),inset 0 1px 0 rgba(255,255,255,.82),0 0 0 3px rgba(15,23,42,.06);}
-            #ne-21box .ne21-mini-row{display:flex;gap:6px;align-items:center;margin:6px 0;}
-            #ne-21box .ne21-mini-row .ne21-input{flex:1;min-width:0;}
-            #ne-21box .ne21-setting-tip{display:block;font-size:11px;color:rgba(15,23,42,.48);line-height:1.5;margin:4px 0 8px;}
-            #ne-21box .ne21-code-box{font-family:"SF Mono",Consolas,monospace;font-size:18px;letter-spacing:2px;text-align:center;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.55);border:1px solid rgba(255,255,255,.7);box-shadow:0 0 0 1px rgba(15,23,42,.05);user-select:all;cursor:pointer;}
-            #ne-21box #modelSelect{flex:1;min-width:0;padding:7px 10px;font-size:12px;border-radius:14px;border:1px solid rgba(255,255,255,.7);background:rgba(255,255,255,.55);color:rgba(15,23,42,.86);cursor:pointer;outline:none;box-shadow:0 0 0 1px rgba(15,23,42,.06),inset 0 1px 0 rgba(255,255,255,.8);transition:background .2s,box-shadow .2s;}
-            #ne-21box #modelSelect:hover{background:rgba(255,255,255,.7);}
-            #ne-21box #modelSelect:focus{background:rgba(255,255,255,.75);box-shadow:0 0 0 1px rgba(15,23,42,.08),inset 0 1px 0 rgba(255,255,255,.85),0 0 0 4px rgba(15,23,42,.1);}
-            #ne-21box .ne21-select{padding:5px 8px;font-size:12px;border-radius:10px;border:1px solid rgba(255,255,255,.65);background:rgba(255,255,255,.5);color:rgba(15,23,42,.86);cursor:pointer;outline:none;min-width:80px;flex-shrink:0;box-shadow:0 0 0 1px rgba(15,23,42,.05),inset 0 1px 0 rgba(255,255,255,.75);transition:background .2s,box-shadow .2s;}
-            #ne-21box .ne21-select:hover{background:rgba(255,255,255,.7);}
-            #ne-21box .ne21-select:focus{background:rgba(255,255,255,.72);box-shadow:0 0 0 1px rgba(15,23,42,.08),inset 0 1px 0 rgba(255,255,255,.82),0 0 0 3px rgba(15,23,42,.06);}
-            #ne-21box #userInfo{margin:10px 0 0;padding:10px 12px;background:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.7);border-radius:12px;box-shadow:0 0 0 1px rgba(15,23,42,.05),inset 0 1px 0 rgba(255,255,255,.75);font-size:12px;color:rgba(15,23,42,.66);line-height:1.6;overflow:hidden;}
-            #ne-21box #userInfo:empty{display:none;}
-            #ne-21box #userInfo b{color:rgba(15,23,42,.9);font-weight:600;}
-            #ne-21box #moreSettings{padding:4px 14px;background:rgba(255,255,255,.42);border:1px solid rgba(255,255,255,.65);border-radius:14px;box-shadow:0 0 0 1px rgba(15,23,42,.05),inset 0 1px 0 rgba(255,255,255,.7);margin:10px 0 0;}
-            #ne-21box #moreSettings label{display:flex;flex-direction:row-reverse;align-items:center;justify-content:space-between;margin:0;padding:8px 2px;font-size:12px;color:rgba(15,23,42,.78);cursor:pointer;user-select:none;line-height:1.4;}
-            #ne-21box #moreSettings label + label{border-top:1px dashed rgba(15,23,42,.1);}
-            #ne-21box #moreSettings input[type=checkbox]{appearance:none;-webkit-appearance:none;width:34px;height:20px;border:1px solid rgba(15,23,42,.08);border-radius:20px;cursor:pointer;position:relative;transition:background .25s,box-shadow .25s;background:rgba(15,23,42,.16);box-shadow:inset 0 1px 2px rgba(15,23,42,.12);margin:0 0 0 10px;flex-shrink:0;}
-            #ne-21box #moreSettings input[type=checkbox]::before{content:'';position:absolute;top:1px;left:1px;width:16px;height:16px;border-radius:50%;background:linear-gradient(180deg,rgba(255,255,255,1),rgba(255,255,255,.85));box-shadow:0 1px 3px rgba(15,23,42,.25),inset 0 1px 0 rgba(255,255,255,1);transition:transform .25s cubic-bezier(.2,.9,.3,1);}
-            #ne-21box #moreSettings input[type=checkbox]:hover{background:rgba(15,23,42,.24);}
-            #ne-21box #moreSettings input[type=checkbox]:checked{background:rgba(255,255,255,.78);border-color:rgba(15,23,42,.1);box-shadow:inset 0 1px 0 rgba(255,255,255,.95),inset 0 -2px 4px rgba(15,23,42,.08),0 0 0 1px rgba(15,23,42,.06);}
-            #ne-21box #moreSettings input[type=checkbox]:checked:hover{background:rgba(255,255,255,.92);}
-            #ne-21box #moreSettings input[type=checkbox]:checked::before{transform:translateX(14px);}
-            #ne-21box #moreSettings p{display:none;}
-            #ne-21box #ne-21thinking{display:none!important;}
+            /* === Compact minimal UI === */
+            #ne-21box{position:fixed;top:5%;right:16%;width:300px;z-index:99999;font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;font-size:13px;color:#1e293b;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(15,23,42,.08);border-radius:14px;box-shadow:0 8px 24px -8px rgba(15,23,42,.2);overflow:hidden;animation:ne21-in .25s ease both}
+            @keyframes ne21-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+            #ne-21box .ne21-header{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-bottom:1px solid rgba(15,23,42,.06);cursor:move;user-select:none}
+            #ne-21box .ne21-title{display:flex;align-items:center;gap:7px;font-weight:600;font-size:13px;margin:0}
+            #ne-21box .ne21-dot{width:7px;height:7px;border-radius:50%;background:#10b981;flex-shrink:0;animation:ne21-pulse 2s infinite}
+            @keyframes ne21-pulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.35)}70%{box-shadow:0 0 0 5px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
+            #ne-21box #ne-21close{width:22px;height:22px;padding:0;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1;color:#64748b;cursor:pointer;border:none;border-radius:7px;background:transparent;transition:background .15s,color .15s;font-family:inherit;user-select:none}
+            #ne-21box #ne-21close:hover{background:rgba(15,23,42,.06);color:#1e293b}
+            #ne-21box.ne21-collapsed .ne21-body{display:none}
+            #ne-21box.ne21-collapsed .ne21-header{border-bottom:none}
+            #ne-21box .ne21-body{padding:10px 12px 12px}
+            #ne-21box #ne-21notice{border-top:none!important;margin:0 0 8px!important;overflow:visible}
+            #ne-21box .ne21-uid{display:flex;align-items:center;gap:5px;color:#64748b;font-size:12px;margin-bottom:8px}
+            #ne-21box .ne21-uid b{color:#1e293b;font-weight:600}
+            #ne-21box .ne21-row{display:flex;gap:6px;align-items:center}
+            #ne-21box .ne21-btn{display:inline-flex;align-items:center;justify-content:center;padding:5px 12px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid transparent;transition:background .15s,color .15s;white-space:nowrap;font-family:inherit}
+            #ne-21box .ne21-btn-primary{color:#fff;background:#0ea5e9}
+            #ne-21box .ne21-btn-primary:hover{background:#0284c7}
+            #ne-21box .ne21-btn-secondary{color:#475569;background:rgba(15,23,42,.05)}
+            #ne-21box .ne21-btn-secondary:hover{background:rgba(15,23,42,.1);color:#1e293b}
+            #ne-21box .ne21-select{box-sizing:border-box;padding:5px 8px;font-size:12px;border-radius:8px;border:1px solid rgba(15,23,42,.12);background:#fff;color:#1e293b;outline:none}
+            #ne-21box .ne21-select:focus{border-color:#0ea5e9;box-shadow:0 0 0 2px rgba(14,165,233,.15)}
+            #ne-21box #modelSelect{flex:1;min-width:0;padding:5px 8px;font-size:12px;border-radius:8px;border:1px solid rgba(15,23,42,.12);background:#fff;color:#1e293b;cursor:pointer;outline:none}
+            #ne-21box #modelSelect:focus{border-color:#0ea5e9;box-shadow:0 0 0 2px rgba(14,165,233,.15)}
+            #ne-21box #userInfo{margin:8px 0 0;padding:8px 10px;background:rgba(15,23,42,.03);border-radius:8px;font-size:12px;color:#64748b;line-height:1.6;overflow:hidden}
+            #ne-21box #userInfo:empty{display:none}
+            #ne-21box #userInfo b{color:#1e293b;font-weight:600}
+            #ne-21box #moreSettings{margin:8px 0 0}
+            #ne-21box #moreSettings details + details{border-top:1px solid rgba(15,23,42,.05)}
+            #ne-21box #moreSettings summary{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#475569;cursor:pointer;user-select:none;padding:7px 2px;list-style:none}
+            #ne-21box #moreSettings summary::-webkit-details-marker{display:none}
+            #ne-21box #moreSettings summary::before{content:'▸';font-size:10px;color:#94a3b8;transition:transform .15s}
+            #ne-21box #moreSettings details[open] summary::before{transform:rotate(90deg)}
+            #ne-21box #moreSettings label{display:flex;flex-direction:row-reverse;align-items:center;justify-content:space-between;gap:8px;margin:0;padding:6px 2px;font-size:12px;color:#475569;cursor:pointer;user-select:none;line-height:1.4}
+            #ne-21box #moreSettings label:hover{color:#1e293b}
+            #ne-21box #moreSettings input[type=checkbox]{appearance:none;-webkit-appearance:none;width:32px;height:18px;border:none;border-radius:18px;background:rgba(15,23,42,.14);position:relative;cursor:pointer;transition:background .2s;margin:0;flex-shrink:0}
+            #ne-21box #moreSettings input[type=checkbox]::before{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.25);transition:transform .2s}
+            #ne-21box #moreSettings input[type=checkbox]:checked{background:#10b981}
+            #ne-21box #moreSettings input[type=checkbox]:checked::before{transform:translateX(14px)}
+            #ne-21box #ne-21thinking{display:none!important}
             @keyframes ne21-spin{to{transform:rotate(360deg)}}
             @keyframes ne21-dot{0%,80%,100%{transform:scale(.5);opacity:.4}40%{transform:scale(1);opacity:1}}
-            #ne-21box #ne-21log .ne21-log-spinner{display:inline-block;width:9px;height:9px;margin-right:5px;border:1.5px solid rgba(15,23,42,.18);border-top-color:rgba(15,23,42,.7);border-radius:50%;vertical-align:-1px;animation:ne21-spin .8s linear infinite;}
-            #ne-21box #ne-21log .ne21-log-dots{display:inline-flex;gap:2px;margin-left:3px;vertical-align:1px;}
-            #ne-21box #ne-21log .ne21-log-dots i{width:3px;height:3px;border-radius:50%;background:currentColor;opacity:.65;animation:ne21-dot 1.2s infinite ease-in-out both;}
-            #ne-21box #ne-21log .ne21-log-dots i:nth-child(2){animation-delay:.16s;}
-            #ne-21box #ne-21log .ne21-log-dots i:nth-child(3){animation-delay:.32s;}
-            #ne-21box #ne-21log{max-height:140px;overflow-y:auto;margin:12px 0 0;padding:10px 12px;background:rgba(15,23,42,.06);border:1px solid rgba(255,255,255,.55);border-radius:14px;box-shadow:0 0 0 1px rgba(15,23,42,.06),inset 0 1px 0 rgba(255,255,255,.6),inset 0 0 16px rgba(15,23,42,.06);font-family:"SF Mono","Cascadia Code",Consolas,Menlo,monospace;font-size:11px;line-height:1.6;color:rgba(15,23,42,.78);}
-            #ne-21box #ne-21log:empty{display:none;}
-            #ne-21box #ne-21log::-webkit-scrollbar{width:5px;}
-            #ne-21box #ne-21log::-webkit-scrollbar-thumb{background:rgba(15,23,42,.2);border-radius:4px;}
-            #ne-21box #ne-21log::-webkit-scrollbar-thumb:hover{background:rgba(15,23,42,.32);}
-            #ne-21box #ne-21log p{margin:0;padding:2px 0;word-break:break-all;}
-            #ne-21box #ne-21log hr{display:none;}
-            #ne-21box #ne-21log .ne21-time{color:rgba(15,23,42,.4);margin-right:6px;}
+            #ne-21box #ne-21log{max-height:150px;overflow-y:auto;margin:8px 0 0;padding:8px 10px;background:rgba(15,23,42,.04);border-radius:8px;font-family:ui-monospace,SFMono-Regular,Consolas,Menlo,monospace;font-size:11px;line-height:1.6;color:#475569}
+            #ne-21box #ne-21log:empty{display:none}
+            #ne-21box #ne-21log::-webkit-scrollbar{width:4px}
+            #ne-21box #ne-21log::-webkit-scrollbar-thumb{background:rgba(15,23,42,.15);border-radius:4px}
+            #ne-21box #ne-21log p{margin:0;padding:1px 0;word-break:break-all}
+            #ne-21box #ne-21log hr{display:none}
+            #ne-21box #ne-21log .ne21-time{color:#94a3b8;margin-right:5px}
+            #ne-21box #ne-21log .ne21-log-spinner{display:inline-block;width:8px;height:8px;margin-right:4px;border:1.5px solid rgba(15,23,42,.15);border-top-color:#475569;border-radius:50%;vertical-align:-1px;animation:ne21-spin .8s linear infinite}
+            #ne-21box #ne-21log .ne21-log-dots{display:inline-flex;gap:2px;margin-left:3px;vertical-align:1px}
+            #ne-21box #ne-21log .ne21-log-dots i{width:3px;height:3px;border-radius:50%;background:currentColor;opacity:.6;animation:ne21-dot 1.2s infinite ease-in-out both}
+            #ne-21box #ne-21log .ne21-log-dots i:nth-child(2){animation-delay:.16s}
+            #ne-21box #ne-21log .ne21-log-dots i:nth-child(3){animation-delay:.32s}
             `;
             panelDoc.head.appendChild(styleEl);
         }
@@ -439,32 +427,30 @@ function showBox() {
                     <div id="ne-21notice"></div>
                     <div id="userInfo"></div>
                     <div id="moreSettings" style="display:none;">
-                        <label><select id="GPTJsSetting.rate" class="ne21-select"><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>视频/音频倍速</label>
-                        <label title="两次 AI 搜题请求之间的最小间隔（秒）。0 为不节流；高并发整卷预览、小号被限流时可设 1~3">
-                            <input type="number" id="GPTJsSetting.reqIntervalTime" class="ne21-select" min="0" max="60" step="1" style="min-width:56px;width:56px;padding:5px 8px;">搜题间隔 (秒)
-                        </label>
-                        <p></p>
-                        <label><input type="checkbox" id="GPTJsSetting.sub">测验自动提交</label>
-                        <label><input type="checkbox" id="GPTJsSetting.force">测验强制提交</label>
-                        <label><input type="checkbox" id="GPTJsSetting.examTurn">考试自动跳转</label>
-                        <p></p>
-                        <label><input type="checkbox" id="GPTJsSetting.goodStudent">答案加粗不选择</label>
-                        <label><input type="checkbox" id="GPTJsSetting.alterTitle" checked>答案插入题目后</label>
-                        <p></p>
- <label><input type="checkbox" id="GPTJsSetting.redo">重做模式 (不跳过已答题)</label>
- <label><input type="checkbox" id="GPTJsSetting.fuzzyMatch" checked>相似度匹配 (答案模糊匹配)</label>
- <label title="提交测验后不自动跳转，等答题详情页公布答案与分数，自动核对并修正题库；已提交(已完成)的测验页也会自动核对公布答案（错误答案改为公布的正确答案，置信度标记为'根据答案修改'）"><input type="checkbox" id="GPTJsSetting.checkAnswer">答题核对模式 (提交后核对修正题库 · 含已提交测验)</label>
- <p></p>
- <label title="AI 搜题使用的 API Key，需填写后才能调用 AI 答题" style="display:flex;align-items:center;gap:6px;">
- <input type="password" id="GPTJsSetting.apiKey" class="ne21-select" style="min-width:180px;width:180px;padding:5px 8px;font-size:12px;" placeholder="选填：用其他模型时填写">AI API Key（默认模型免填）
- </label>
- <p></p>
- <div style="font-size:11px;color:rgba(15,23,42,.48);line-height:1.5;margin-bottom:6px;">若发现AI答题或题库答案有误，可点击下方按钮进入管理后台修正答案</div>
- <a href="http://106.14.39.185:9000/admin" target="_blank" style="display:inline-block;padding:8px 16px;background:#0ea5e9;color:#fff;border-radius:6px;font-size:13px;text-decoration:none;font-weight:500;">📚 题库管理后台</a>
- </div>
-                    <div id="ne-21thinking">
-                        <div class="ne21-thinking-spinner"></div>
-                        <span class="ne21-thinking-text">AI 思考中<span class="ne21-thinking-dots"><i></i><i></i><i></i></span></span>
+                        <details open>
+                            <summary>答题自动化</summary>
+                            <label><input type="checkbox" id="GPTJsSetting.sub">测验自动提交</label>
+                            <label><input type="checkbox" id="GPTJsSetting.force">测验强制提交</label>
+                            <label><input type="checkbox" id="GPTJsSetting.examTurn">考试自动跳转</label>
+                            <label><input type="checkbox" id="GPTJsSetting.redo">重做模式 (不跳过已答题)</label>
+                            <label title="提交测验后不自动跳转，等答题详情页公布答案与分数，自动核对并修正题库；已提交(已完成)的测验页也会自动核对公布答案（错误答案改为公布的正确答案，置信度标记为'根据答案修改'）"><input type="checkbox" id="GPTJsSetting.checkAnswer">答题核对模式 (提交后核对修正题库 · 含已提交测验)</label>
+                        </details>
+                        <details>
+                            <summary>显示与匹配</summary>
+                            <label><input type="checkbox" id="GPTJsSetting.goodStudent">答案加粗不选择</label>
+                            <label><input type="checkbox" id="GPTJsSetting.alterTitle" checked>答案插入题目后</label>
+                            <label><input type="checkbox" id="GPTJsSetting.fuzzyMatch" checked>相似度匹配 (答案模糊匹配)</label>
+                        </details>
+                        <details>
+                            <summary>高级设置</summary>
+                            <label><select id="GPTJsSetting.rate" class="ne21-select"><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>视频/音频倍速</label>
+                            <label title="两次 AI 搜题请求之间的最小间隔（秒）。0 为不节流；高并发整卷预览、小号被限流时可设 1~3"><input type="number" id="GPTJsSetting.reqIntervalTime" class="ne21-select" min="0" max="60" step="1" style="min-width:56px;width:56px;">搜题间隔 (秒)</label>
+                            <label title="AI 搜题使用的 API Key，需填写后才能调用 AI 答题" style="flex-direction:column;align-items:stretch;gap:4px;">AI API Key（默认模型免填）
+                                <input type="password" id="GPTJsSetting.apiKey" class="ne21-select" placeholder="选填：用其他模型时填写">
+                            </label>
+                            <div class="ne21-tip">若发现 AI 答题或题库答案有误，可进入管理后台修正答案</div>
+                            <a href="http://106.14.39.185:9000/admin" target="_blank" class="ne21-btn ne21-btn-primary" style="text-decoration:none;">📚 题库管理后台</a>
+                        </details>
                     </div>
                     <div id="ne-21log"></div>
                 </div>
@@ -637,8 +623,6 @@ function showBox() {
                 <option value="nvidia/nemotron-3-ultra-550b-a55b">Nemotron 3 Ultra (慢)</option>
             </select>
             <button id="moreSettingsBtn" class="ne21-btn ne21-btn-secondary">设置</button>
-        </div>
-        <div class="ne21-row" style="margin-top:6px;">
         </div>
     `);
 
