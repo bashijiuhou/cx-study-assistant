@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name               cx-study-assistant
-// @version            3.4.0
+// @version            3.4.1
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -1302,6 +1302,58 @@ function missonRead(dom, obj) {
     })
 }
 
+// 提交后核对：公布答案的详情页是异步渲染的，且可能藏在多层 iframe 里，
+// 原来固定等 4 秒只解析一次——加载慢/壳 iframe 停在提交空壳时就会"识别不到题"。
+// 改为轮询等题目容器出现（每 2.5 秒一次，最多 ~25 秒）；PC 壳层迟迟无题时
+// 主动把壳 iframe 换成 phone 详情页（与"已完成测验核对"同款兜底）。
+function pollVerifyThenAdvance(frameEl, docFallback, advance) {
+    var attempts = 0, maxAttempts = 8, swapped = false;
+    function liveDoc() {
+        try {
+            // 优先取 iframe 的"当前"文档：提交后页面跳转时旧 doc 引用会失效，frameEl.contentDocument 始终指向最新的
+            if (frameEl && frameEl.contentDocument) return $(frameEl.contentDocument);
+        } catch (e) {}
+        return docFallback || null;
+    }
+    function tryParse() {
+        var doc = liveDoc();
+        var hasContent = false;
+        try {
+            if (doc && doc.length) {
+                var $deep = deepenWorkDoc(doc);
+                hasContent = $deep.length && ($deep.find('.Py-mian1').length || $deep.find('.TiMu').length);
+            }
+        } catch (e) {}
+        if (!hasContent && !swapped && attempts >= 1 && frameEl) {
+            // 壳层迟迟没有题面 → 主动加载 phone 详情页（PC 提交后壳 iframe 不显示详情的兜底）
+            var pw = buildPhoneWebFromIframe(frameEl);
+            if (pw) {
+                logger('🔎 提交后核对：当前页无题面，已改加载答题详情页...', 'blue');
+                try { $(frameEl).attr('src', pw); } catch (e) {}
+                swapped = true;
+            }
+        }
+        if (hasContent || attempts >= maxAttempts) {
+            verifyQuestionBankFromResultPage(liveDoc()).then(function () {
+                logger('🔎 核对完成，继续下一任务。', 'green');
+                advance();
+            });
+            return;
+        }
+        attempts++;
+        setTimeout(tryParse, 2500);
+    }
+    tryParse();
+}
+
+// 从一个 doc 引用（提交后可能已失效）尽力拿到其所属 iframe 元素，供轮询取实时文档
+function frameElFromDocRef(docNode) {
+    try {
+        if (docNode && docNode.defaultView && docNode.defaultView.frameElement) return docNode.defaultView.frameElement;
+    } catch (e) {}
+    return null;
+}
+
 function afterSubmitNext($okBtnRef) {
     // 提交成功后的收尾：默认切下一任务；答题核对模式开启时先核对公布答案再继续
     var next = function () {
@@ -1312,16 +1364,14 @@ function afterSubmitNext($okBtnRef) {
     if (!isCheckAnswerEnabled()) { next(); return; }
     logger('🔎 答题核对模式开启：提交后暂停跳转，等待答案公布...', 'blue');
     setTimeout(function () {
-        var doc = null;
+        var docFallback = null, frameEl = null;
         try {
-            if ($okBtnRef && $okBtnRef[0]) doc = $($okBtnRef[0].ownerDocument);
-        } catch (e) { doc = null; }
-        verifyQuestionBankFromResultPage(doc).then(function () {
-            logger('🔎 核对完成，继续下一任务。', 'green');
-            _mlist.splice(0, 1);
-            _domList.splice(0, 1);
-            setTimeout(switchMission, 3000);
-        });
+            if ($okBtnRef && $okBtnRef[0]) {
+                docFallback = $($okBtnRef[0].ownerDocument);
+                frameEl = frameElFromDocRef($okBtnRef[0].ownerDocument);
+            }
+        } catch (e) {}
+        pollVerifyThenAdvance(frameEl, docFallback, next);
     }, 4000);
 }
 
@@ -1335,17 +1385,14 @@ function afterSubmitNextFrame($frameRef, index, doms) {
     if (!isCheckAnswerEnabled()) { next(); return; }
     logger('🔎 答题核对模式开启：提交后暂停跳转，等待答案公布...', 'blue');
     setTimeout(function () {
-        var doc = null;
+        var docFallback = null, frameEl = null;
         try {
-            if ($frameRef && $frameRef[0] && $frameRef[0].ownerDocument) doc = $($frameRef[0].ownerDocument);
-            else if ($frameRef && $frameRef.contents && $frameRef.contents().length) doc = $frameRef.contents();
-        } catch (e) { doc = null; }
-        verifyQuestionBankFromResultPage(doc).then(function () {
-            logger('🔎 核对完成，继续下一任务。', 'green');
-            _mlist.splice(0, 1);
-            _domList.splice(0, 1);
-            setTimeout(function () { startDoCyWork(index + 1, doms) }, 3000);
-        });
+            if ($frameRef && $frameRef[0]) {
+                docFallback = $($frameRef[0]);
+                frameEl = frameElFromDocRef($frameRef[0]);
+            }
+        } catch (e) {}
+        pollVerifyThenAdvance(frameEl, docFallback, next);
     }, 4000);
 }
 
@@ -3841,6 +3888,8 @@ function zeQuery(title, options, type) {
 // 将答案回写到自建题库
 function tikuSaveAnswer(title, options, type, answer, confidence) {
  try {
+ // 判断题(type=3)入库答案统一归一为"对/错"（AI 记"正确/错误"与公布页"对/错"是同一答案的写法差异）
+ if (String(type) === '3' && answer) answer = normalizeJudgeAnswer(answer);
  GM_xmlhttpRequest({
  method: 'POST',
  url: 'http://106.14.39.185:9000/api/upsert',
@@ -4044,6 +4093,24 @@ function publishedToOptionText(pub, options) {
     return texts.join('#');
 }
 
+// 判断题答案归一化：AI 答题入库记"正确/错误"，公布页显示"对/错"（另有√/×/T/F等变体），
+// 语义相同但字符串不同，直接比对会每次核对都误判"答案不同"而复写题库。统一归一为 对/错。
+function normalizeJudgeAnswer(s) {
+    var t = String(s || '').trim().replace(/[。．.;；\s]+$/g, '');
+    if (!t) return t;
+    var low = t.toLowerCase();
+    if (/^(对|是|正确|√|t|true|ri|right|yes)$/.test(low)) return '对';
+    if (/^(错|否|错误|×|x|f|false|wr|wrong|no)$/.test(low)) return '错';
+    return t;
+}
+
+// 判断题类型识别（q.type 可能未知，兜底看 typeName 文本）
+function isJudgmentQuestion(q) {
+    if (q.type === 3) return true;
+    var tn = String(q && q.typeName || '');
+    return /判断|是非|true\s*or\s*false|judgment/i.test(tn);
+}
+
 // 主流程：抓到答题详情页后，逐题核对 tiku，不同则修正
 async function verifyQuestionBankFromResultPage($scope) {
     if (!isCheckAnswerEnabled()) return;
@@ -4098,6 +4165,7 @@ async function verifyQuestionBankFromResultPage($scope) {
             if (miss <= 8) logger('⚠️ 第' + (i + 1) + '题 题库未命中[' + (res.msg || '未知') + '] type=' + zePayload.type + '：' + (q.title.length > 40 ? q.title.slice(0, 40) + '…' : q.title), 'yellow');
             // 未命中但有公布答案 → 自动入库（新增题目），下次查询即可命中
             var pubTextNew = publishedToOptionText(q.published, q.options);
+            if (isJudgmentQuestion(q)) pubTextNew = normalizeJudgeAnswer(pubTextNew);   // 判断题统一记 对/错
             if (pubTextNew && zePayload.title) {
                 tikuSaveAnswer(zePayload.title, zePayload.options, zePayload.type, pubTextNew, '根据答案修改');
                 logger('📥 第' + (i + 1) + '题 题库未命中，已按公布答案入库：〔' + (q.title.length > 28 ? q.title.slice(0, 28) + '…' : q.title) + '〕 → ' + pubTextNew, 'blue');
@@ -4107,6 +4175,13 @@ async function verifyQuestionBankFromResultPage($scope) {
         var storedAns = String(res.answer).replace(/\s*#\s*/g, '#').trim();
         // 公布答案(字母) → 选项文本，与题库保存格式一致（防选项换位错位）
         var pubText = publishedToOptionText(q.published, q.options);
+        // 判断题：题库存"正确/错误"、公布页记"对/错"等变体，归一化后再比较，
+        // 语义相同视为一致，不再每次核对都复写题库
+        var rawStored = storedAns, rawPub = pubText;
+        if (isJudgmentQuestion(q)) {
+            storedAns = normalizeJudgeAnswer(storedAns);
+            pubText = normalizeJudgeAnswer(pubText);
+        }
         var pubAnsNorm = String(pubText).replace(/\s*#\s*/g, '#').trim();
         matched++;
         if (storedAns !== pubAnsNorm) {
@@ -4115,7 +4190,7 @@ async function verifyQuestionBankFromResultPage($scope) {
             logger('✏️ 第' + (i + 1) + '题 题库答案与公布不同，已修正：〔' + (q.title.length > 28 ? q.title.slice(0, 28) + '…' : q.title) + '〕 ' + storedAns + ' → ' + pubText, 'green');
             corrected++;
         } else {
-            logger('✅ 第' + (i + 1) + '题 题库答案与公布一致', 'gray');
+            logger('✅ 第' + (i + 1) + '题 题库答案与公布一致' + ((rawStored !== storedAns || rawPub !== pubText) ? '（写法不同已归一：' + rawStored + ' / ' + rawPub + '）' : ''), 'gray');
         }
     }
     logger('🔎 答案核对完成：共 ' + matched + ' 题命中题库，修正 ' + corrected + ' 题，未命中 ' + miss + ' 题，无公布答案 ' + noPub + ' 题。' + (corrected ? '(已按公布答案更新题库)' : (miss ? '(未命中原因见上方⚠️日志)' : '')), (miss && !matched) ? 'orange' : 'green');
