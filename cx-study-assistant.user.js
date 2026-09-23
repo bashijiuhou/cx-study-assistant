@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name               cx-study-assistant
-// @version            3.3.0
+// @version            3.4.0
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -19,6 +19,34 @@
 // @updateURL          https://raw.githubusercontent.com/bashijiuhou/cx-study-assistant/cx-study-倍速/cx-study-assistant.user.js
 // @downloadURL        https://raw.githubusercontent.com/bashijiuhou/cx-study-assistant/cx-study-倍速/cx-study-assistant.user.js
 // ==/UserScript==
+
+/* ---------------------------------------------------
+   设置存取：GM 存储（跨子域/跨站共享，页面 JS 读不到）
+   超星页面分散在 mooc1/mooc2-ans/i.chaoxing.com 等多个源，
+   localStorage 按源隔离导致设置各存一份；GM 存储按脚本存，全站一份。
+   --------------------------------------------------- */
+function gget(key) { return GM_getValue(key, null); }
+function gset(key, val) { GM_setValue(key, String(val)); }
+
+// 一次性迁移：把旧版存在 localStorage 的设置拷入 GM 存储。
+// 迁移标记按 origin 记：每个源首次运行各迁移一次本域旧值；
+// 仅拷 GM 中尚不存在的键，避免覆盖升级后用户已改的新值。
+(function ne21MigrateLocalStorage() {
+    try {
+        var _flag = 'GPTJsSetting.__migrated_' + location.origin;
+        if (GM_getValue(_flag, false)) return;
+        var _copied = 0;
+        for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (k && k.indexOf('GPTJsSetting.') === 0 && GM_getValue(k) === undefined) {
+                var v = localStorage.getItem(k);
+                if (v !== null) { GM_setValue(k, v); _copied++; }
+            }
+        }
+        GM_setValue(_flag, true);
+        if (_copied > 0) console.log('[cx-study-assistant] 已从 localStorage 迁移 ' + _copied + ' 项设置到 GM 存储');
+    } catch (e) { /* 迁移失败不影响运行 */ }
+})();
 
 /* ---------------------------------------------------
    自定义配置区（建议使用 const/let，避免全局 var）
@@ -55,7 +83,7 @@ const setting = {
   phone: '',
   password: '',
 
-  // AI 与题库密钥（可通过 localStorage 覆盖）
+  // AI 与题库密钥（可通过 GM 存储覆盖）
   apiKey: '',               // 默认留空，用户需要在面板中填写自己的 API Key
   tikuToken: 'tiku-self-2026'
 };
@@ -74,9 +102,9 @@ const _Swal = window.Swal || unsafeWindow.Swal;
 // 多域名候选及自动测速选择
 // API 配置 — 使用自建 New-API
 var _host = "https://api.bashijiuhou.com";
-var _apiKey = localStorage.getItem('GPTJsSetting.apiKey') || setting.apiKey || "";
+var _apiKey = gget('GPTJsSetting.apiKey') || setting.apiKey || "";
 var _defaultModel = "nvidia/nemotron-3-super-120b-a12b";
-var _tikuToken = localStorage.getItem('GPTJsSetting.tikuToken') || setting.tikuToken || "tiku-self-2026";
+var _tikuToken = gget('GPTJsSetting.tikuToken') || setting.tikuToken || "tiku-self-2026";
 
 
 
@@ -185,19 +213,19 @@ function parseUrlParams() {
 
 function updateLocalStorage(event) {
     var checkbox = event.target;
-    localStorage.setItem(checkbox.id, checkbox.checked);
+    gset(checkbox.id, checkbox.checked);
 }
 
 // 判断是否开启重做模式（不跳过已答题）
 function isRedoMode() {
-    var stored = localStorage.getItem('GPTJsSetting.redo');
+    var stored = gget('GPTJsSetting.redo');
     if (stored !== null) return stored === 'true';
     return !!setting.redo;
 }
 
 // 判断是否开启相似度匹配
 function isFuzzyMatchEnabled() {
-    var stored = localStorage.getItem('GPTJsSetting.fuzzyMatch');
+    var stored = gget('GPTJsSetting.fuzzyMatch');
     if (stored !== null) return stored === 'true';
     return !!setting.fuzzyMatch;
 }
@@ -279,9 +307,9 @@ function findFuzzyMatchMultiple(optionTexts, aiAnswer, threshold) {
     return matched;
 }
 
-// 读取播放倍速：优先 localStorage（UI 设置），否则回退 setting.rate；范围 (0, 16]
+// 读取播放倍速：优先 GM 存储（UI 设置），否则回退 setting.rate；范围 (0, 16]
 function getRate() {
-    var stored = localStorage.getItem('GPTJsSetting.rate');
+    var stored = gget('GPTJsSetting.rate');
     var n = stored !== null ? parseFloat(stored) : (setting.rate || 1);
     // 负数或 NaN 则恢复为正常速率 1
     if (!isFinite(n) || n < 0) n = 1;
@@ -454,7 +482,7 @@ function showBox() {
             var $box = $('#ne-21box', panelDoc);
             // 恢复位置
             try {
-                var savedPos = localStorage.getItem('GPTJsSetting.boxPosition');
+                var savedPos = gget('GPTJsSetting.boxPosition');
                 if (savedPos) {
                     var pos = JSON.parse(savedPos);
                     if (pos && typeof pos.left === 'number' && typeof pos.top === 'number') {
@@ -468,7 +496,7 @@ function showBox() {
                 }
             } catch (_) { /* empty */ }
             // 恢复收起/展开状态
-            if (localStorage.getItem('GPTJsSetting.boxCollapsed') === 'true') {
+            if (gget('GPTJsSetting.boxCollapsed') === 'true') {
                 $box.addClass('ne21-collapsed');
                 $('#ne-21close', panelDoc).text('+').attr('aria-label', '展开');
             }
@@ -483,9 +511,9 @@ function showBox() {
             $(this).text(collapsed ? '+' : '−');
             $(this).attr('aria-label', collapsed ? '展开' : '收起');
             // 持久化收起/展开状态
-            try { localStorage.setItem('GPTJsSetting.boxCollapsed', collapsed ? 'true' : 'false'); } catch (_) { /* empty */ }
+            try { gset('GPTJsSetting.boxCollapsed', collapsed ? 'true' : 'false'); } catch (_) { /* empty */ }
         });
-        // 标题栏拖动：拖动结束后写入 localStorage，刷新后保持上次位置
+        // 标题栏拖动：拖动结束后写入 GM 存储，刷新后保持上次位置
         (function () {
             var $box = $('#ne-21box', panelDoc);
             var $header = $box.find('.ne21-header');
@@ -522,7 +550,7 @@ function showBox() {
                 // 持久化位置
                 try {
                     var rect = $box[0].getBoundingClientRect();
-                    localStorage.setItem('GPTJsSetting.boxPosition', JSON.stringify({ left: rect.left, top: rect.top }));
+                    gset('GPTJsSetting.boxPosition', JSON.stringify({ left: rect.left, top: rect.top }));
                 } catch (_) { /* empty */ }
             });
         })();
@@ -544,33 +572,33 @@ function showBox() {
             });
 
             // 修改题目默认开启（仅初始化一次，避免 forEach 内重复执行）
-            if (localStorage.getItem('GPTJsSetting.alterTitle') === null) {
-                localStorage.setItem('GPTJsSetting.alterTitle', 'true');
+            if (gget('GPTJsSetting.alterTitle') === null) {
+                gset('GPTJsSetting.alterTitle', 'true');
             }
             // 相似度匹配默认开启
-            if (localStorage.getItem('GPTJsSetting.fuzzyMatch') === null) {
-                localStorage.setItem('GPTJsSetting.fuzzyMatch', 'true');
+            if (gget('GPTJsSetting.fuzzyMatch') === null) {
+                gset('GPTJsSetting.fuzzyMatch', 'true');
             }
 
             ['sub', 'force', 'examTurn', 'goodStudent', 'alterTitle', 'redo', 'fuzzyMatch', 'checkAnswer'].forEach(function (settingId) {
                 var checkbox = panelDoc.getElementById('GPTJsSetting.' + settingId);
                 if (!checkbox) return;
                 checkbox.addEventListener('change', updateLocalStorage);
-                checkbox.checked = localStorage.getItem('GPTJsSetting.' + settingId) === 'true';
+                checkbox.checked = gget('GPTJsSetting.' + settingId) === 'true';
             });
 
             // 倍速下拉：恢复上次选择并持久化
             var rateSelect = panelDoc.getElementById('GPTJsSetting.rate');
             if (rateSelect) {
-                rateSelect.value = localStorage.getItem('GPTJsSetting.rate') || '1';
+                rateSelect.value = gget('GPTJsSetting.rate') || '1';
                 rateSelect.addEventListener('change', function () {
-                    localStorage.setItem('GPTJsSetting.rate', rateSelect.value);
+                    gset('GPTJsSetting.rate', rateSelect.value);
                 });
             }
             // 搜题间隔输入框：恢复上次值并持久化（范围 0~60 秒）
             var reqIntervalInput = panelDoc.getElementById('GPTJsSetting.reqIntervalTime');
             if (reqIntervalInput) {
-                var savedInterval = localStorage.getItem('GPTJsSetting.reqIntervalTime');
+                var savedInterval = gget('GPTJsSetting.reqIntervalTime');
                 reqIntervalInput.value = (savedInterval !== null && isFinite(parseInt(savedInterval, 10)))
                     ? savedInterval
                     : String(setting.reqIntervalTime || 0);
@@ -579,18 +607,18 @@ function showBox() {
  if (!isFinite(v) || v < 0) v = 0;
  if (v > 60) v = 60;
  reqIntervalInput.value = String(v);
- localStorage.setItem('GPTJsSetting.reqIntervalTime', String(v));
+ gset('GPTJsSetting.reqIntervalTime', String(v));
  });
  }
 
  // API Key 输入框：恢复并持久化，修改后实时更新全局变量
  var apiKeyInput = panelDoc.getElementById('GPTJsSetting.apiKey');
  if (apiKeyInput) {
- var savedKey = localStorage.getItem('GPTJsSetting.apiKey');
+ var savedKey = gget('GPTJsSetting.apiKey');
  if (savedKey) apiKeyInput.value = savedKey;
  apiKeyInput.addEventListener('change', function () {
  var v = apiKeyInput.value.trim();
- localStorage.setItem('GPTJsSetting.apiKey', v);
+ gset('GPTJsSetting.apiKey', v);
  _apiKey = v || setting.apiKey || '';
  });
  }
@@ -620,7 +648,7 @@ function showBox() {
     // 同步恢复上次选中的模型，避免等 window.onload 造成的闪烁
     // 旧模型名映射（向后兼容）
     var _modelCompat = {
-        // 旧/已下线模型映射到当前可用模型，避免老用户 localStorage 激活坏模型
+        // 旧/已下线模型映射到当前可用模型，避免老用户 GM 存储激活坏模型
         'z-ai/glm-5.1': 'nvidia/nemotron-3-super-120b-a12b',
         'glm-4-flash': 'deepseek-ai/deepseek-v4-flash-0731',
         'glm-5': 'nvidia/nemotron-3-super-120b-a12b',
@@ -633,12 +661,12 @@ function showBox() {
         'moonshotai/kimi-k2.6': 'nvidia/nemotron-3-super-120b-a12b',
         'minimaxai/minimax-m2.7': 'nvidia/nemotron-3-super-120b-a12b'
     };
-    var lastSelectedModel = localStorage.getItem('GPTJsSetting.model') || _defaultModel;
+    var lastSelectedModel = gget('GPTJsSetting.model') || _defaultModel;
     lastSelectedModel = _modelCompat[lastSelectedModel] || lastSelectedModel;
     $('#modelSelect', panelDoc).val(lastSelectedModel);
     // 同步绑定 change 监听（命名空间避免 showBox 重入时重复绑定）
     $('#modelSelect', panelDoc).off('change.gptjsModel').on('change.gptjsModel', function () {
-        localStorage.setItem('GPTJsSetting.model', $(this).val());
+        gset('GPTJsSetting.model', $(this).val());
     });
 
     //公告&积分
@@ -1426,7 +1454,7 @@ function doPhoneWork($dom) {
 
 function startDoPhoneTimu(index, TimuList) {
     if (index == TimuList.length) {
-        if (localStorage.getItem('GPTJsSetting.sub') === 'true') {
+        if (gget('GPTJsSetting.sub') === 'true') {
             logger('测验处理完成，准备自动提交。', 'green')
             setTimeout(() => {
                 $subBtn.click()
@@ -1436,7 +1464,7 @@ function startDoPhoneTimu(index, TimuList) {
                     afterSubmitNext($okBtn)
                 }, 3000)
             }, 5000)
-        } else if (localStorage.getItem('GPTJsSetting.force') === 'true') {
+        } else if (gget('GPTJsSetting.force') === 'true') {
             logger('测验处理完成，存在无答案题目,由于用户设置了强制提交，准备自动提交。', 'red')
             setTimeout(() => {
                 $subBtn.click()
@@ -1561,7 +1589,7 @@ function startDoPhoneTimu(index, TimuList) {
                     if (_i == -1) {
                         logger('AI未能完美匹配正确答案，请尝试更换更高级模型或手动选择，跳过此题', 'red')
                         // setting.sub = 0
-                        localStorage.setItem('GPTJsSetting.sub', false)
+                        gset('GPTJsSetting.sub', false)
                         setTimeout(() => { startDoPhoneTimu(index + 1, TimuList) }, setting.time)
                     } else {
                         $(_answerTmpArr[_i]).click()
@@ -1606,7 +1634,7 @@ function startDoPhoneTimu(index, TimuList) {
                     if (agrs == '暂无答案') {
                         logger('AI未能完美匹配正确答案，请尝试更换更高级模型或手动选择，跳过此题', 'red')
                         // setting.sub = 0
-                        localStorage.setItem('GPTJsSetting.sub', false)
+                        gset('GPTJsSetting.sub', false)
                         setTimeout(() => { startDoPhoneTimu(index + 1, TimuList) }, setting.time)
                     } else {
                         _answerTmpArr = $(TimuList[index]).find('.answerList.multiChoice li')
@@ -1642,7 +1670,7 @@ function startDoPhoneTimu(index, TimuList) {
                             } else {
                                 logger('未能正确选择答案，请手动选择，跳过此题', 'red')
                                 // setting.sub = 0
-                                localStorage.setItem('GPTJsSetting.sub', false)
+                                gset('GPTJsSetting.sub', false)
                             }
                             setTimeout(() => { startDoPhoneTimu(index + 1, TimuList) }, setting.time)
                         }, 1000)
@@ -1674,7 +1702,7 @@ function startDoPhoneTimu(index, TimuList) {
                 getAnswer(_type, _question).then((agrs) => {
                     if (agrs == '暂无答案') {
                         logger('AI未能完美匹配正确答案，请尝试更换更高级模型或手动选择，跳过此题', 'red')
-                        localStorage.setItem('GPTJsSetting.sub', false)
+                        gset('GPTJsSetting.sub', false)
                         setTimeout(() => { startDoPhoneTimu(index + 1, TimuList) }, setting.time)
                         return
                     }
@@ -1748,7 +1776,7 @@ function startDoPhoneTimu(index, TimuList) {
                 getAnswer(_type, _question).then((agrs) => {
                     if (agrs == '暂无答案') {
                         logger('AI未能完美匹配正确答案，请尝试更换更高级模型或手动选择，跳过此题', 'red')
-                        localStorage.setItem('GPTJsSetting.sub', false)
+                        gset('GPTJsSetting.sub', false)
                         setTimeout(() => { startDoPhoneTimu(index + 1, TimuList) }, setting.time)
                         return
                     }
@@ -1769,7 +1797,7 @@ function startDoPhoneTimu(index, TimuList) {
                 })
             } else {
                 logger('未找到填空题输入区域，跳过此题', 'red')
-                localStorage.setItem('GPTJsSetting.sub', false)
+                gset('GPTJsSetting.sub', false)
                 setTimeout(() => { startDoPhoneTimu(index + 1, TimuList) }, setting.time)
             }
             break
@@ -1843,7 +1871,7 @@ function startDoPhoneTimu(index, TimuList) {
                 getAnswer(_type, _question).then((agrs) => {
                     if (agrs == '暂无答案') {
                         logger('AI无法匹配答案，请手动完成', 'red')
-                        localStorage.setItem('GPTJsSetting.sub', false)
+                        gset('GPTJsSetting.sub', false)
                         setTimeout(() => { startDoPhoneTimu(index + 1, TimuList) }, setting.time)
                         return
                     }
@@ -1931,7 +1959,7 @@ function startDoPhoneTimu(index, TimuList) {
                     getAnswer(_type, _question).then((agrs) => {
                         if (agrs == '暂无答案') {
                             logger('AI无法匹配答案，请手动完成', 'red')
-                            localStorage.setItem('GPTJsSetting.sub', false)
+                            gset('GPTJsSetting.sub', false)
                         } else {
                             $(jdTextareas[0]).val(agrs)
                             $(jdTextareas[0]).trigger('input').trigger('change')
@@ -1948,7 +1976,7 @@ function startDoPhoneTimu(index, TimuList) {
             // 如果以上方法都失败
             else {
                 logger('无法找到简答题输入区域，请手动完成', 'red')
-                localStorage.setItem('GPTJsSetting.sub', false)
+                gset('GPTJsSetting.sub', false)
                 setTimeout(() => { startDoPhoneTimu(index + 1, TimuList) }, setting.time)
             }
             break
@@ -1956,7 +1984,7 @@ function startDoPhoneTimu(index, TimuList) {
         case 5: {
             getAnswer(_type, _question).then((agrs) => {
                 // setting.sub = 0
-                localStorage.setItem('GPTJsSetting.sub', false)
+                gset('GPTJsSetting.sub', false)
                 logger('此类型题目无法区分单/多选，请手动选择答案', 'red')
                 setTimeout(() => { startDoPhoneTimu(index + 1, TimuList) }, setting.time)
             }).catch((agrs) => {
@@ -1969,7 +1997,7 @@ function startDoPhoneTimu(index, TimuList) {
         default:
             logger('暂不支持处理此类型题目：' + questionFull.match(/.*?\[(.*?)]|$/)[1] + '，跳过！请手动作答。', 'red')
             // setting.sub = 0
-            localStorage.setItem('GPTJsSetting.sub', false)
+            gset('GPTJsSetting.sub', false)
             setTimeout(() => { startDoPhoneTimu(index + 1, TimuList) }, setting.time)
             break
     }
@@ -2047,13 +2075,13 @@ function setupAntiSleep() {
 }
 
 // 周期性自动刷新页面，防止脚本因不可恢复的 iframe 卡死/超星接口响应异常而死循环
-// 默认关闭，需用户在 localStorage 写入 GPTJsSetting.autoRefresh=true 启用
+// 默认关闭，需用户在 GM 存储写入 GPTJsSetting.autoRefresh=true 启用
 // 默认 30 分钟，可通过 GPTJsSetting.autoRefreshMinutes 改写（最小 5 分钟）
 function setupAutoRefresh() {
-    var stored = localStorage.getItem('GPTJsSetting.autoRefresh');
+    var stored = gget('GPTJsSetting.autoRefresh');
     var enabled = stored !== null ? (stored === 'true') : false;
     if (!enabled) return;
-    var minutes = parseInt(localStorage.getItem('GPTJsSetting.autoRefreshMinutes'), 10);
+    var minutes = parseInt(gget('GPTJsSetting.autoRefreshMinutes'), 10);
     if (!isFinite(minutes) || minutes < 5) minutes = 30;
     setTimeout(function () {
         logger('已达到自动刷新时间（' + minutes + '分钟），3 秒后刷新页面...', 'orange');
@@ -2325,7 +2353,7 @@ function doHomeWork(index, TiMuList) {
                     $.each(_answerTmpArr, (i, t) => {
                         _a.push(tidyStr($(t).html()))
                     })
-                    if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                    if (gget('GPTJsSetting.alterTitle') === 'true') {
                         //修改题目将答案插入
                         let timuele = $(TiMuList[index]).find('.mark_name')
                         // logger("timuele题目标签:"+timuele.html())
@@ -2388,7 +2416,7 @@ function doHomeWork(index, TiMuList) {
             }
             if (check_answer_flag == 0) {
                 getAnswer(_type, _question).then((agrs) => {
-                    if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                    if (gget('GPTJsSetting.alterTitle') === 'true') {
                         //修改题目将答案插入
                         let timuele = $(TiMuList[index]).find('.mark_name')
                         // logger("timuele题目标签:"+timuele.html())
@@ -2495,7 +2523,7 @@ function doHomeWork(index, TiMuList) {
             if (check_answer_flag == 0) {
                 _question = buildPrompt({ type: '判断题', question: _question, answer_format: "只回答正确或错误" })
                 getAnswer(_type, _question).then((agrs) => {
-                    if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                    if (gget('GPTJsSetting.alterTitle') === 'true') {
                         let timuele = $(TiMuList[index]).find('.mark_name')
                         timuele.html(timuele.html() + "<p></p>" + agrs)
                     }
@@ -2546,7 +2574,7 @@ function doHomeWork(index, TiMuList) {
             }
             let jdt = buildPrompt({ type: typeName || '简答题', question: _question, answer_format: "用50字简要回答" })
             getAnswer(_type, jdt).then((agrs) => {
-                if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                if (gget('GPTJsSetting.alterTitle') === 'true') {
                     let timuele = $(TiMuList[index]).find('.mark_name')
                     timuele.html(timuele.html() + "<p></p>" + agrs)
                 }
@@ -2583,7 +2611,7 @@ function doHomeWork(index, TiMuList) {
             }
             let jdt5 = buildPrompt({ type: typeName || '写作题', question: _question, answer_format: "用英文根据题目进行写作" })
             getAnswer(_type, jdt5).then((agrs) => {
-                if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                if (gget('GPTJsSetting.alterTitle') === 'true') {
                     let timuele = $(TiMuList[index]).find('.mark_name')
                     timuele.html(timuele.html() + "<p></p>" + agrs)
                 }
@@ -2620,7 +2648,7 @@ function doHomeWork(index, TiMuList) {
             }
             let jdt6 = buildPrompt({ type: typeName || '翻译题', question: _question, answer_format: "中文英文互译" })
             getAnswer(_type, jdt6).then((agrs) => {
-                if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                if (gget('GPTJsSetting.alterTitle') === 'true') {
                     let timuele = $(TiMuList[index]).find('.mark_name')
                     timuele.html(timuele.html() + "<p></p>" + agrs)
                 }
@@ -2784,7 +2812,7 @@ function missonExam() {
                 $.each(_answerTmpArr, (i, t) => {
                     _a.push(tidyStr($(t).html()))
                 })
-                if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                if (gget('GPTJsSetting.alterTitle') === 'true') {
                     //修改题目将答案插入
                     let timuele = $_examtable.find('h3.mark_name')
                     // logger(timuele.html())
@@ -2803,7 +2831,7 @@ function missonExam() {
                     setTimeout(() => {
                         if (($(_answerTmpArr[_i]).parent().find('span').attr('class') || '').indexOf('check_answer') == -1) {
                             //好学生模式,ABCD加粗
-                            if (localStorage.getItem('GPTJsSetting.goodStudent') === 'true') {
+                            if (gget('GPTJsSetting.goodStudent') === 'true') {
                                 $(_answerTmpArr[_i]).parent().find('span').css('font-weight', 'bold');
                             } else {
                                 setTimeout(() => { $(_answerTmpArr[_i]).parent().click() }, 300)
@@ -2850,7 +2878,7 @@ function missonExam() {
             mergedAnswers = mergedAnswers.join("|");
             _question = buildPrompt({ type: '多选题', question: _question, options: mergedAnswers.split('|'), answer_format: "用'|'分割多个答案" })
             getAnswer(_qType, _question).then((agrs) => {
-                if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                if (gget('GPTJsSetting.alterTitle') === 'true') {
                     //修改题目将答案插入
                     let timuele = $_examtable.find('h3.mark_name')
                     // logger(timuele.html())
@@ -2867,7 +2895,7 @@ function missonExam() {
                         if (agrs.indexOf(_multiOptions[i]) != -1) {
                             _matchedAny = true
                             //好学生模式,ABCD加粗
-                            if (localStorage.getItem('GPTJsSetting.goodStudent') === 'true') {
+                            if (gget('GPTJsSetting.goodStudent') === 'true') {
                                 $(_answerTmpArr[i]).parent().find('span').css('font-weight', 'bold');
                             } else {
                                 setTimeout(() => { $(_answerTmpArr[i]).parent().click() }, 300)
@@ -2879,7 +2907,7 @@ function missonExam() {
                         let fuzzyIndices = findFuzzyMatchMultiple(_multiOptions, agrs)
                         for (var fi = 0; fi < fuzzyIndices.length; fi++) {
                             (function (idx) {
-                                if (localStorage.getItem('GPTJsSetting.goodStudent') === 'true') {
+                                if (gget('GPTJsSetting.goodStudent') === 'true') {
                                     $(_answerTmpArr[idx]).parent().find('span').css('font-weight', 'bold');
                                 } else {
                                     setTimeout(function () { $(_answerTmpArr[idx]).parent().click() }, 300)
@@ -2958,7 +2986,7 @@ function missonExam() {
                 _a.push($(t).text().trim())
             })
             getAnswer(_qType, _question).then((agrs) => {
-                if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                if (gget('GPTJsSetting.alterTitle') === 'true') {
                     //修改题目将答案插入
                     let timuele = $_examtable.find('h3.mark_name')
                     timuele.html(timuele.html() + agrs)
@@ -2978,7 +3006,7 @@ function missonExam() {
                 }
                 if (($(_answerTmpArr[_i]).parent().find('span').attr('class') || '').indexOf('check_answer') == -1) {
                     //好学生模式,ABCD加粗
-                    if (localStorage.getItem('GPTJsSetting.goodStudent') === 'true') {
+                    if (gget('GPTJsSetting.goodStudent') === 'true') {
                         setTimeout(() => { $(_answerTmpArr[_i]).parent().find('span').css('font-weight', 'bold'); }, 300)
                     } else {
                         $(_answerTmpArr[_i]).parent().click()
@@ -3012,7 +3040,7 @@ function missonExam() {
             }
             let jdt = buildPrompt({ type: typeName || '简答题', question: _question, answer_format: "用50字简要回答" })
             getAnswer(_qType, jdt).then((agrs) => {
-                if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                if (gget('GPTJsSetting.alterTitle') === 'true') {
                     let timuele = $_examtable.find('h3.mark_name')
                     timuele.html(timuele.html() + agrs)
                 }
@@ -3042,7 +3070,7 @@ function missonExam() {
             }
             let jdt = buildPrompt({ type: typeName || '写作题', question: _question, answer_format: "用英文根据题目进行写作" })
             getAnswer(_qType, jdt).then((agrs) => {
-                if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                if (gget('GPTJsSetting.alterTitle') === 'true') {
                     let timuele = $_examtable.find('h3.mark_name')
                     timuele.html(timuele.html() + agrs)
                 }
@@ -3072,7 +3100,7 @@ function missonExam() {
             }
             let jdt = buildPrompt({ type: typeName || '翻译题', question: _question, answer_format: "中文英文互译" })
             getAnswer(_qType, jdt).then((agrs) => {
-                if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                if (gget('GPTJsSetting.alterTitle') === 'true') {
                     let timuele = $_examtable.find('h3.mark_name')
                     timuele.html(timuele.html() + agrs)
                 }
@@ -3169,7 +3197,7 @@ function missonExam() {
 
 
 function toNextExam() {
-    if (localStorage.getItem('GPTJsSetting.examTurn') === 'true') {
+    if (gget('GPTJsSetting.examTurn') === 'true') {
         let $_examtable = $('.mark_table').find('.whiteDiv')
         let $nextbtn = $_examtable.find('.nextDiv a.jb_btn')
         setTimeout(() => {
@@ -3301,7 +3329,7 @@ function doExamPreview(index, TiMuList) {
             if (alreadyAnswered) return nextFast()
             getAnswer(_type, prompt).then(function (agrs) {
                 $.each(_answerTmpArr, function (i, t) { _a.push(tidyStr($(t).html())) })
-                if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                if (gget('GPTJsSetting.alterTitle') === 'true') {
                     let timuele = $timu.find('.mark_name')
                     timuele.html(timuele.html() + '<p></p>' + agrs)
                 }
@@ -3317,7 +3345,7 @@ function doExamPreview(index, TiMuList) {
                 setTimeout(function () {
                     let cls = $(_answerTmpArr[_i]).parent().find('span').attr('class') || ''
                     if (cls.indexOf('check_answer') === -1) {
-                        if (localStorage.getItem('GPTJsSetting.goodStudent') === 'true') {
+                        if (gget('GPTJsSetting.goodStudent') === 'true') {
                             $(_answerTmpArr[_i]).parent().find('span').css('font-weight', 'bold')
                         } else {
                             $(_answerTmpArr[_i]).parent().click()
@@ -3355,7 +3383,7 @@ function doExamPreview(index, TiMuList) {
             }
             if (alreadyAnswered) return nextFast()
             getAnswer(_type, prompt).then(function (agrs) {
-                if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                if (gget('GPTJsSetting.alterTitle') === 'true') {
                     let timuele = $timu.find('.mark_name')
                     timuele.html(timuele.html() + '<p></p>' + agrs)
                 }
@@ -3367,7 +3395,7 @@ function doExamPreview(index, TiMuList) {
                 $.each(_answerTmpArr, function (i, t) {
                     if (agrs.indexOf(_multiOptions[i]) !== -1) {
                         _matchedAny = true
-                        if (localStorage.getItem('GPTJsSetting.goodStudent') === 'true') {
+                        if (gget('GPTJsSetting.goodStudent') === 'true') {
                             $(_answerTmpArr[i]).parent().find('span').css('font-weight', 'bold')
                         } else {
                             let cls = $(_answerTmpArr[i]).parent().find('span').attr('class') || ''
@@ -3382,7 +3410,7 @@ function doExamPreview(index, TiMuList) {
                     let fuzzyIndices = findFuzzyMatchMultiple(_multiOptions, agrs)
                     for (var fi = 0; fi < fuzzyIndices.length; fi++) {
                         (function (idx) {
-                            if (localStorage.getItem('GPTJsSetting.goodStudent') === 'true') {
+                            if (gget('GPTJsSetting.goodStudent') === 'true') {
                                 $(_answerTmpArr[idx]).parent().find('span').css('font-weight', 'bold')
                             } else {
                                 let cls = $(_answerTmpArr[idx]).parent().find('span').attr('class') || ''
@@ -3458,7 +3486,7 @@ function doExamPreview(index, TiMuList) {
             if (alreadyAnswered) return nextFast()
             let prompt = buildPrompt({ type: '判断题', question: _question, answer_format: "只回答正确或错误" })
             getAnswer(_type, prompt).then(function (agrs) {
-                if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                if (gget('GPTJsSetting.alterTitle') === 'true') {
                     let timuele = $timu.find('.mark_name')
                     timuele.html(timuele.html() + '<p></p>' + agrs)
                 }
@@ -3471,7 +3499,7 @@ function doExamPreview(index, TiMuList) {
                 setTimeout(function () {
                     let cls = $(_answerTmpArr[_i]).parent().find('span').attr('class') || ''
                     if (cls.indexOf('check_answer') === -1) {
-                        if (localStorage.getItem('GPTJsSetting.goodStudent') === 'true') {
+                        if (gget('GPTJsSetting.goodStudent') === 'true') {
                             $(_answerTmpArr[_i]).parent().find('span').css('font-weight', 'bold')
                         } else {
                             $(_answerTmpArr[_i]).parent().click()
@@ -3685,7 +3713,7 @@ var QUESTION_BANK_KEY = 'GPTJsQuestionBank';
 var QUESTION_BANK_MAX = 5000;  // 最多缓存 5000 题
 
 function isQuestionBankEnabled() {
-    var stored = localStorage.getItem('GPTJsSetting.questionBank');
+    var stored = gget('GPTJsSetting.questionBank');
     if (stored !== null) return stored === 'true';
     return true;  // 默认开启
 }
@@ -3842,7 +3870,7 @@ function tikuSaveAnswer(title, options, type, answer, confidence) {
 // ═══════════════════════════════════════════════════════════════════
 
 function isCheckAnswerEnabled() {
-    var v = localStorage.getItem('GPTJsSetting.checkAnswer');
+    var v = gget('GPTJsSetting.checkAnswer');
     if (v !== null) return v === 'true';
     return false;
 }
@@ -4048,8 +4076,8 @@ async function verifyQuestionBankFromResultPage($scope) {
                         structure.push(this.tagName.toLowerCase() + '.' + cn.slice(0, 50));
                     });
                 }
-                // 顺带把详情页 HTML 存一份到 localStorage，方便完整排查
-                try { localStorage.setItem('GPTJsSetting.debugResultHTML', (($nc.length ? $nc.html() : $scope.html()) || '').slice(0, 8000)); } catch (e) {}
+                // 顺带把详情页 HTML 存一份到 GM 存储，方便完整排查
+                try { gset('GPTJsSetting.debugResultHTML', (($nc.length ? $nc.html() : $scope.html()) || '').slice(0, 8000)); } catch (e) {}
             }
         } catch (e) {}
         logger('🔎 答题详情页未解析到题目。容器探测=' + JSON.stringify(d) + ' 结构→ ' + (structure.join(' | ') || '(空)'), 'orange');
@@ -4188,7 +4216,7 @@ async function getAnswer(_t, _q, retryCount = 0) {
         let longWaitTimer = null;
 
         // 按用户设置的搜题间隔节流
-        let _intervalSec = parseInt(localStorage.getItem('GPTJsSetting.reqIntervalTime'), 10)
+        let _intervalSec = parseInt(gget('GPTJsSetting.reqIntervalTime'), 10)
         if (!isFinite(_intervalSec) || _intervalSec < 0) _intervalSec = (setting && setting.reqIntervalTime) || 0
         let _intervalMs = Math.min(60000, _intervalSec * 1000)
         let _nowTs = Date.now()
@@ -4221,12 +4249,12 @@ async function getAnswer(_t, _q, retryCount = 0) {
 
         // 旧模型名映射（向后兼容）
 var _modelCompat = { 'z-ai/glm-5.1': 'nvidia/nemotron-3-super-120b-a12b', 'glm-4-flash': 'deepseek-ai/deepseek-v4-flash-0731', 'glm-5': 'nvidia/nemotron-3-super-120b-a12b', 'deepseek-ai/deepseek-v4-flash': 'deepseek-ai/deepseek-v4-flash-0731', 'deepseek-default': 'deepseek-ai/deepseek-v4-flash-0731', 'deepseek-expert': 'deepseek-ai/deepseek-v4-flash-0731', 'deepseek-reasoner': 'nvidia/nemotron-3-super-120b-a12b', 'openai/gpt-oss-120b:free': 'openai/gpt-oss-20b', 'qwen/qwen3-32b': 'openai/gpt-oss-20b', 'moonshotai/kimi-k2.6': 'nvidia/nemotron-3-super-120b-a12b', 'minimaxai/minimax-m2.7': 'nvidia/nemotron-3-super-120b-a12b' };
- let _model = localStorage.getItem('GPTJsSetting.model') || _defaultModel;
+ let _model = gget('GPTJsSetting.model') || _defaultModel;
  _model = _modelCompat[_model] || _model;
 
  // 默认 key 仅允许默认模型，其他模型需要用户自填 key
  var _defaultApiKey = setting.apiKey;
- var _userApiKey = localStorage.getItem('GPTJsSetting.apiKey') || '';
+ var _userApiKey = gget('GPTJsSetting.apiKey') || '';
  var _allowedDefaultModels = ['nvidia/nemotron-3-super-120b-a12b', 'deepseek-ai/deepseek-v4-flash-0731', 'openai/gpt-oss-20b', 'nvidia/nemotron-3.5-lightning-30b-a3b', 'nvidia/nemotron-3-ultra-550b-a55b'];
  if (!_allowedDefaultModels.includes(_model) && !_userApiKey) {
  logger('当前模型「' + _model + '」需要填写你自己的 API Key，默认 Key 仅限默认模型使用，跳过', 'red');
@@ -4358,7 +4386,7 @@ function doWork(index, doms, dom) {
 
 function startDoWork(index, doms, c, TiMuList) {
     if (c == TiMuList.length) {
-        if (localStorage.getItem('GPTJsSetting.sub') === 'true') {
+        if (gget('GPTJsSetting.sub') === 'true') {
             logger('测验处理完成，准备自动提交。', 'green')
             setTimeout(() => {
                 $subBtn.click()
@@ -4368,7 +4396,7 @@ function startDoWork(index, doms, c, TiMuList) {
                     afterSubmitNextFrame($frame_c, index, doms)
                 }, 3000)
             }, 5000)
-        } else if (localStorage.getItem('GPTJsSetting.force') === 'true') {
+        } else if (gget('GPTJsSetting.force') === 'true') {
             logger('测验处理完成，存在无答案题目,由于用户设置了强制提交，准备自动提交。', 'red')
             setTimeout(() => {
                 $subBtn.click()
@@ -4456,7 +4484,7 @@ function startDoWork(index, doms, c, TiMuList) {
                 _a.push(tidyStr($(t).html()))
             })
             getAnswer(_TimuType, _question).then((agrs) => {
-                if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                if (gget('GPTJsSetting.alterTitle') === 'true') {
                     //修改题目将答案插入
                     let timuele = $(TiMuList[c]).find('.Zy_TItle.clearfix > div')
                     timuele.html(timuele.html() + agrs)
@@ -4468,7 +4496,7 @@ function startDoWork(index, doms, c, TiMuList) {
                 }
                 if (_i == -1) {
                     logger('AI无法完美匹配正确答案,请手动选择，跳过', 'red')
-                    localStorage.setItem('GPTJsSetting.sub', false)
+                    gset('GPTJsSetting.sub', false)
                 } else {
                     $(_answerTmpArr[_i]).parent().click();
                 }
@@ -4489,7 +4517,7 @@ function startDoWork(index, doms, c, TiMuList) {
             mergedAnswers = mergedAnswers.join("|");
             _question = buildPrompt({ type: '多选题', question: _question, options: mergedAnswers.split('|'), answer_format: "用'|'分割多个答案" })
             getAnswer(_TimuType, _question).then((agrs) => {
-                if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                if (gget('GPTJsSetting.alterTitle') === 'true') {
                     //修改题目将答案插入
                     let timuele = $(TiMuList[c]).find('.Zy_TItle.clearfix > div')
                     timuele.html(timuele.html() + agrs)
@@ -4518,7 +4546,7 @@ function startDoWork(index, doms, c, TiMuList) {
                 if (_a.length <= 0) {
                     logger('AI无法完美匹配正确答案,请手动选择，跳过', 'red')
                     // setting.sub = 0
-                    localStorage.setItem('GPTJsSetting.sub', false)
+                    gset('GPTJsSetting.sub', false)
                 } else {
                     $(TiMuList[c]).find('.Zy_ulTop').parent().find('#answer' + id).val(_a.join(""))
                 }
@@ -4532,7 +4560,7 @@ function startDoWork(index, doms, c, TiMuList) {
             _question = buildPrompt({ type: '填空题', question: _question, answer_format: "多个填空用'|'分隔" })
             let _textareaList = $(TiMuList[c]).find('.Zy_ulTk .XztiHover1')
             getAnswer(_TimuType, _question).then((agrs) => {
-                if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                if (gget('GPTJsSetting.alterTitle') === 'true') {
                     //修改题目将答案插入
                     let timuele = $(TiMuList[c]).find('.Zy_TItle.clearfix > div')
                     timuele.html(timuele.html() + agrs)
@@ -4558,7 +4586,7 @@ function startDoWork(index, doms, c, TiMuList) {
             });
             _question = buildPrompt({ type: '判断题', question: _question, answer_format: "只回答正确或错误" })
             getAnswer(_TimuType, _question).then((agrs) => {
-                if (localStorage.getItem('GPTJsSetting.alterTitle') === 'true') {
+                if (gget('GPTJsSetting.alterTitle') === 'true') {
                     //修改题目将答案插入
                     let timuele = $(TiMuList[c]).find('.Zy_TItle.clearfix > div')
                     timuele.html(timuele.html() + agrs)
@@ -4571,7 +4599,7 @@ function startDoWork(index, doms, c, TiMuList) {
                 }
                 if (_i == -1) {
                     logger("未匹配到正确答案，跳过", "red");
-                    localStorage.setItem('GPTJsSetting.sub', false)
+                    gset('GPTJsSetting.sub', false)
                 } else {
                     $(_answerTmpArr[_i]).parent().click();
                 }
@@ -4590,7 +4618,7 @@ function startDoWork(index, doms, c, TiMuList) {
             getAnswer(_TimuType, _question).then((agrs) => {
                 if (agrs == '暂无答案') {
                     // setting.sub = 0
-                    localStorage.setItem('GPTJsSetting.sub', false)
+                    gset('GPTJsSetting.sub', false)
                 }
                 let _answerList = agrs.split("#")
                 $.each(_textareaLista, (i, t) => {
