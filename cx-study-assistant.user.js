@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name               cx-study-assistant
-// @version            3.4.1
+// @version            3.4.2
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -150,9 +150,11 @@ if (_l.pathname == '/login' && setting.autoLogin) {
     $('#ne-21log', zerrorGetDocument()).html('初始化完毕！')
     setupAntiSleep()
     setupAutoRefresh()
+    setupStuckWatchdog()
 } else if (_l.pathname.includes('/knowledge/cards')) {
     showBox()
     setupAntiSleep()
+    setupStuckWatchdog()
     var params = getTaskParams()
     var parsedParams = null;
     if (params && params !== '$mArg') {
@@ -847,13 +849,16 @@ function toNext() {
                 }, 5000)
                 return
             } else if (t['status'].indexOf('闯关') != -1) {
+                _ne21ManualPause = true
                 logger('当前为闯关模式，存在未完成任务点，脚本已暂停运行，请手动完成并点击下一章节', 'red')
                 return
             } else if (t['status'].indexOf('开放') != -1) {
+                _ne21ManualPause = true
                 logger('章节未开放', 'red')
                 return
             }
         }
+        _ne21ManualPause = true
         logger('此课程处理完毕', 'green')
         return
     })
@@ -948,20 +953,54 @@ function missonVideo(dom, obj) {
     let mediaType = isAudioTask ? 'audio' : 'video'; // 按任务类型预设，循环里再以 DOM 为准
 
     if (!target) {
-        logger(`未找到${taskLabel} iframe，3 秒后重试……`, 'orange');
+        // 上限 40 次（约 2 分钟），防止页面空白/iframe 永不出现时无限递归重试
+        const retries = (typeof missonVideo.retries === 'number') ? missonVideo.retries + 1 : 1;
+        if (retries >= 40) {
+            missonVideo.retries = 0;
+            logger(`多次重试仍未找到${taskLabel} iframe（疑似空白页），跳过此任务`, 'red');
+            return switchMission();
+        }
+        missonVideo.retries = retries;
+        logger(`未找到${taskLabel} iframe，3 秒后重试（${retries}/40）……`, 'orange');
         return setTimeout(() => missonVideo(dom, obj), 3000);
     }
+    missonVideo.retries = 0;
 
     logger(`处理${taskLabel}：${name}，正在解析`);
     let executed = false;
-    const doc = target.contentDocument || target.contentWindow.document;
+    let loadAttempts = 0;
+    let reloadedOnce = false;
 
     const intervalId = setInterval(() => {
+        // iframe 可能中途重载/替换，每轮重新获取 document，
+        // 避免开始时捕获的旧引用在空白页/重载后永久查不到 video 而卡死
+        let doc = null;
+        try { doc = target.contentDocument || (target.contentWindow && target.contentWindow.document); } catch (_) { /* 跨域或已销毁 */ }
         // 先尝试查找视频，如果没有则尝试查找音频
-        let media = doc.querySelector('video');
-        if (!media) {
+        let media = doc ? doc.querySelector('video') : null;
+        if (!media && doc) {
             media = doc.querySelector('audio');
             mediaType = 'audio';
+        }
+
+        if (!media) {
+            loadAttempts++;
+            if (loadAttempts % 24 === 0) {
+                logger(`${name} 仍在等待${taskLabel}加载（${Math.round(loadAttempts * 2.5)}秒）...`, 'orange');
+            }
+            if (loadAttempts >= 96) { // 约 4 分钟仍未加载出
+                if (!reloadedOnce) {
+                    reloadedOnce = true;
+                    loadAttempts = 48; // 重载后再给约 2 分钟
+                    logger(`${name} 长时间未加载出${taskLabel}（疑似空白页），尝试重载任务框架...`, 'red');
+                    try { const s = target.src; target.src = s; } catch (_) { /* empty */ }
+                } else {
+                    clearInterval(intervalId);
+                    logger(`${name} 重载后仍未加载出${taskLabel}，跳过此任务`, 'red');
+                    switchMission();
+                }
+            }
+            return;
         }
 
         if (media && !executed) {
@@ -2134,6 +2173,95 @@ function setupAutoRefresh() {
         logger('已达到自动刷新时间（' + minutes + '分钟），3 秒后刷新页面...', 'orange');
         setTimeout(function () { try { window.location.reload(); } catch (_) { /* empty */ } }, 3000);
     }, minutes * 60 * 1000);
+}
+
+/* ---------------------------------------------------
+   卡死看门狗（v3.4.2）：解决页面/iframe 空白时脚本永久卡住的问题
+   每 30 秒巡检一次，两类症状触发自动刷新整页自愈：
+   1. 本 frame 页面空白（body 无任何子节点）持续超过 2 分钟；
+   2. 当前任务是视频/音频，但全站所有可访问 frame 内长时间
+      没有任何正在播放的媒体（疑似空白页/播放器加载失败）。
+   排除项：闯关模式、章节未开放、课程完毕等需人工介入的暂停点
+   会置 _ne21ManualPause，看门狗不介入，避免无限刷新循环。
+   默认启用。GM 键：
+     GPTJsSetting.stuckWatchdog=false        关闭看门狗
+     GPTJsSetting.stuckWatchdogMinutes=N     无播放心跳阈值（分钟，最小 3，默认 8）
+   --------------------------------------------------- */
+var _ne21ManualPause = false; // 需人工介入/脚本已停止时置 true，看门狗让路
+
+function _ne21AnyPlayingMedia() {
+    var docs = [document];
+    try { if (window.top && window.top.document) docs.push(window.top.document); } catch (_) { /* 跨域 */ }
+    try {
+        var frames = document.querySelectorAll('iframe');
+        for (var i = 0; i < frames.length; i++) {
+            try {
+                var d = frames[i].contentDocument;
+                if (d) docs.push(d);
+            } catch (_) { /* 跨域 */ }
+        }
+    } catch (_) { /* empty */ }
+    for (var j = 0; j < docs.length; j++) {
+        try {
+            var medias = docs[j].querySelectorAll('video, audio');
+            for (var k = 0; k < medias.length; k++) {
+                if (!medias[k].paused && medias[k].currentTime > 0) return true;
+            }
+        } catch (_) { /* empty */ }
+    }
+    return false;
+}
+
+function setupStuckWatchdog() {
+    var enabledRaw = gget('GPTJsSetting.stuckWatchdog');
+    var enabled = enabledRaw !== null ? (enabledRaw === 'true') : true; // 默认启用
+    if (!enabled) return;
+    var minutes = parseFloat(gget('GPTJsSetting.stuckWatchdogMinutes'));
+    if (!isFinite(minutes) || minutes < 3) minutes = 8;
+    var mediaStallMs = minutes * 60 * 1000;
+    var blankStallMs = 2 * 60 * 1000;
+    var mediaStallSince = 0;
+    var blankSince = 0;
+    setInterval(function () {
+        var now = Date.now();
+        // 症状 1：页面空白（body 无子节点，连脚本浮窗都没挂上）
+        try {
+            if (!document.body || document.body.childElementCount === 0) {
+                if (!blankSince) blankSince = now;
+                else if (now - blankSince >= blankStallMs) {
+                    console.log('[cx-study-assistant] 检测到页面空白超过 2 分钟，自动刷新自愈');
+                    try { top.location.reload(); } catch (_) { window.location.reload(); }
+                    return;
+                }
+            } else {
+                blankSince = 0;
+            }
+        } catch (_) { /* empty */ }
+        // 症状 2：视频/音频任务长时间无任何播放进度
+        try {
+            var task = (_mlist && _mlist.length > 0) ? _mlist[0] : null;
+            var module = (task && task['property']) ? task['property']['module'] : null;
+            if (task && !_ne21ManualPause && (module === 'insertvideo' || module === 'insertaudio')) {
+                if (_ne21AnyPlayingMedia()) {
+                    mediaStallSince = 0;
+                } else {
+                    if (!mediaStallSince) {
+                        mediaStallSince = now;
+                    } else if (now - mediaStallSince >= mediaStallMs) {
+                        logger('看门狗：视频/音频任务超 ' + minutes + ' 分钟无任何播放进度（疑似空白页卡死），3 秒后自动刷新页面...', 'red');
+                        setTimeout(function () {
+                            try { top.location.reload(); } catch (_) { window.location.reload(); }
+                        }, 3000);
+                        return;
+                    } else if (now - mediaStallSince >= 120000) {
+                        logger('看门狗：' + Math.round((now - mediaStallSince) / 1000) + ' 秒未检测到播放进度，若持续超 ' + minutes + ' 分钟将自动刷新', 'orange');
+                    }
+                }
+            } else {
+                mediaStallSince = 0;
+            }
+        } catch (_) { /* empty */ }
+    }, 30 * 1000);
 }
 
 function startDoPhoneCyWork(index, doms, phoneWeb) {
