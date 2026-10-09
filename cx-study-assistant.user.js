@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name               cx-study-assistant
-// @version            3.4.2
+// @version            3.4.3
 // @description        自建API版 - 使用 api.bashijiuhou.com New-API后端 + 自建题库
 // @match              *://*.chaoxing.com/*
 // @match              *://*.edu.cn/*
@@ -1732,19 +1732,21 @@ function startDoPhoneTimu(index, TimuList) {
                         $.each(_answerTmpArr, (i, t) => {
                             if (agrs.indexOf(_multiOptions[i]) != -1) {
                                 _matchedAny = true
-                                setTimeout(() => { $(_answerTmpArr[i]).click() }, 300)
+                                // 累加延时逐项点击，避免多项并发点击被超星前端合并吞掉
+                                setTimeout(() => { $(_answerTmpArr[i]).click() }, 200 * (i + 1))
                             }
                         })
                         // 如果精确匹配没有命中任何选项，尝试模糊匹配
                         if (!_matchedAny) {
                             let fuzzyIndices = findFuzzyMatchMultiple(_multiOptions, agrs)
                             for (var fi = 0; fi < fuzzyIndices.length; fi++) {
-                                (function (idx) {
-                                    setTimeout(function () { $(_answerTmpArr[idx]).click() }, 300)
-                                })(fuzzyIndices[fi])
+                                (function (idx, delay) {
+                                    setTimeout(function () { $(_answerTmpArr[idx]).click() }, delay)
+                                })(fuzzyIndices[fi], 200 * (fi + 1))
                             }
                         }
                         let check = 0
+                        // 终检延时随选项数动态延长，防止网络卡顿时误判"未能正确选择答案"
                         setTimeout(() => {
                             $.each(_answerTmpArr, (i, t) => {
                                 if (($(_answerTmpArr[i]).attr('class') || '').indexOf('cur') != -1) {
@@ -1759,7 +1761,7 @@ function startDoPhoneTimu(index, TimuList) {
                                 gset('GPTJsSetting.sub', false)
                             }
                             setTimeout(() => { startDoPhoneTimu(index + 1, TimuList) }, setting.time)
-                        }, 1000)
+                        }, 200 * _answerTmpArr.length + 1000)
                     }
                 }).catch((agrs) => {
                     if (agrs['c'] == 0) {
@@ -1821,7 +1823,8 @@ function startDoPhoneTimu(index, TimuList) {
                                 }
 
                                 if (ueditor) {
-                                    ueditor.setContent(answerContent)
+                                    ueditor.setContent(answerContent);
+                                    ueSync(ueditor)
                                     logger(`填空题第${i + 1}空已填入 (Index: ${editorIndex})`, 'green')
                                 } else {
                                     logger(`填空题第${i + 1}空未找到编辑器实例 (Index: ${editorIndex}, ItemId: ${itemId})`, 'yellow')
@@ -1994,7 +1997,8 @@ function startDoPhoneTimu(index, TimuList) {
                                 }
 
                                 if (ueditor) {
-                                    ueditor.setContent(agrs)
+                                    ueditor.setContent(agrs);
+                                    ueSync(ueditor)
                                     logger(`简答题已填入 (Index: ${editorIndex})`, 'green')
                                 } else {
                                     logger(`简答题未找到编辑器实例 (Index: ${editorIndex}, ItemId: ${itemId})`, 'yellow')
@@ -2188,6 +2192,20 @@ function setupAutoRefresh() {
      GPTJsSetting.stuckWatchdogMinutes=N     无播放心跳阈值（分钟，最小 3，默认 8）
    --------------------------------------------------- */
 var _ne21ManualPause = false; // 需人工介入/脚本已停止时置 true，看门狗让路
+
+// getAnswer 401/403 属全局不可逆错误（Key 错误/欠费），
+// 必须停止整套答题流程，禁止"盲目跳题交白卷"式继续
+function isFatalAnswerError(agrs) {
+    return agrs && agrs['c'] != null && (agrs['c'] == 401 || agrs['c'] == 403);
+}
+
+function haltOnFatalAnswerError(agrs) {
+    if (!isFatalAnswerError(agrs)) return false;
+    logger(agrs['c'] == 401 ? 'AI API Key 鉴权失败(401)' : 'AI 余额不足或无权限(403)', 'red');
+    _ne21ManualPause = true;
+    logger('脚本已暂停，请检查 API Key / 余额后刷新页面继续', 'red');
+    return true;
+}
 
 function _ne21AnyPlayingMedia() {
     var docs = [document];
@@ -2437,7 +2455,7 @@ function doHomeWork(index, TiMuList) {
             $.each(textareaList, (i, t) => {
                 let _id = $(t).attr('id') || $(t).attr('name');
                 setTimeout(() => {
-                    try { UE.getEditor(_id).setContent(agrs) } catch (e) { /* ignore */ }
+                    try { var _ue = UE.getEditor(_id); _ue.setContent(agrs); ueSync(_ue); } catch (e) { /* ignore */ }
                 }, 300 + i * 200);
             });
             logger('自动答题成功，准备切换下一题', 'green');
@@ -2756,12 +2774,13 @@ function doHomeWork(index, TiMuList) {
                 $.each(_answerEle, (i, t) => {
                     let _id = $(t).attr('id') || $(t).attr('name')
                     setTimeout(() => {
-                        try { UE.getEditor(_id).setContent(agrs) } catch (e) { /* ignore */ }
+                        try { var _ue = UE.getEditor(_id); _ue.setContent(agrs); ueSync(_ue); } catch (e) { /* ignore */ }
                     }, 300 + i * 200);
                 });
                 logger('自动答题成功，准备切换下一题', 'green')
                 setTimeout(() => { doHomeWork(index + 1, TiMuList) }, setting.time + 200 * _answerEle.length);
-            }).catch(() => {
+            }).catch((agrs) => {
+                if (haltOnFatalAnswerError(agrs)) return;
                 setTimeout(() => { doHomeWork(index + 1, TiMuList) }, setting.time)
             });
         }
@@ -2793,12 +2812,13 @@ function doHomeWork(index, TiMuList) {
                 $.each(_answerEle5, (i, t) => {
                     let _id = $(t).attr('id') || $(t).attr('name')
                     setTimeout(() => {
-                        try { UE.getEditor(_id).setContent(agrs) } catch (e) { /* ignore */ }
+                        try { var _ue = UE.getEditor(_id); _ue.setContent(agrs); ueSync(_ue); } catch (e) { /* ignore */ }
                     }, 300 + i * 200);
                 });
                 logger('自动答题成功，准备切换下一题', 'green')
                 setTimeout(() => { doHomeWork(index + 1, TiMuList) }, setting.time + 200 * _answerEle5.length);
-            }).catch(() => {
+            }).catch((agrs) => {
+                if (haltOnFatalAnswerError(agrs)) return;
                 setTimeout(() => { doHomeWork(index + 1, TiMuList) }, setting.time)
             });
         }
@@ -2830,12 +2850,13 @@ function doHomeWork(index, TiMuList) {
                 $.each(_answerEle6, (i, t) => {
                     let _id = $(t).attr('id') || $(t).attr('name')
                     setTimeout(() => {
-                        try { UE.getEditor(_id).setContent(agrs) } catch (e) { /* ignore */ }
+                        try { var _ue = UE.getEditor(_id); _ue.setContent(agrs); ueSync(_ue); } catch (e) { /* ignore */ }
                     }, 300 + i * 200);
                 });
                 logger('自动答题成功，准备切换下一题', 'green')
                 setTimeout(() => { doHomeWork(index + 1, TiMuList) }, setting.time + 200 * _answerEle6.length);
-            }).catch(() => {
+            }).catch((agrs) => {
+                if (haltOnFatalAnswerError(agrs)) return;
                 setTimeout(() => { doHomeWork(index + 1, TiMuList) }, setting.time)
             });
         }
@@ -3222,11 +3243,11 @@ function missonExam() {
                 $.each(_answerEle, (i, t) => {
                     let _id = $(t).attr('id') || $(t).attr('name')
                     setTimeout(() => {
-                        try { UE.getEditor(_id).setContent(agrs) } catch (e) { /* ignore */ }
+                        try { var _ue = UE.getEditor(_id); _ue.setContent(agrs); ueSync(_ue); } catch (e) { /* ignore */ }
                     }, 300 + i * 200);
                 });
                 setTimeout(toNextExam, 300 + 200 * _answerEle.length);
-            }).catch(() => { toNextExam(); });
+            }).catch((agrs) => { if (!haltOnFatalAnswerError(agrs)) toNextExam(); });
         }
             break
         case 5: {
@@ -3252,11 +3273,11 @@ function missonExam() {
                 $.each(_answerEle, (i, t) => {
                     let _id = $(t).attr('id') || $(t).attr('name')
                     setTimeout(() => {
-                        try { UE.getEditor(_id).setContent(agrs) } catch (e) { /* ignore */ }
+                        try { var _ue = UE.getEditor(_id); _ue.setContent(agrs); ueSync(_ue); } catch (e) { /* ignore */ }
                     }, 300 + i * 200);
                 });
                 setTimeout(toNextExam, 300 + 200 * _answerEle.length);
-            }).catch(() => { toNextExam(); });
+            }).catch((agrs) => { if (!haltOnFatalAnswerError(agrs)) toNextExam(); });
         }
             break
         case 6: {
@@ -3282,11 +3303,11 @@ function missonExam() {
                 $.each(_answerEle, (i, t) => {
                     let _id = $(t).attr('id') || $(t).attr('name')
                     setTimeout(() => {
-                        try { UE.getEditor(_id).setContent(agrs) } catch (e) { /* ignore */ }
+                        try { var _ue = UE.getEditor(_id); _ue.setContent(agrs); ueSync(_ue); } catch (e) { /* ignore */ }
                     }, 300 + i * 200);
                 });
                 setTimeout(toNextExam, 300 + 200 * _answerEle.length);
-            }).catch(() => { toNextExam(); });
+            }).catch((agrs) => { if (!haltOnFatalAnswerError(agrs)) toNextExam(); });
         }
             break
         default: {
@@ -3710,7 +3731,7 @@ function doExamPreview(index, TiMuList) {
                 $.each(_answerEle, function (i, t) {
                     let _id = $(t).attr('id') || $(t).attr('name')
                     setTimeout(function () {
-                        try { UE.getEditor(_id).setContent(agrs) } catch (e) { /* ignore */ }
+                        try { var _ue = UE.getEditor(_id); _ue.setContent(agrs); ueSync(_ue); } catch (e) { /* ignore */ }
                     }, 300 + i * 200)
                 })
                 logger(prefix + '自动答题成功', 'green')
@@ -3743,7 +3764,7 @@ function doExamPreview(index, TiMuList) {
                 $.each(_answerEle, function (i, t) {
                     let _id = $(t).attr('id') || $(t).attr('name')
                     setTimeout(function () {
-                        try { UE.getEditor(_id).setContent(agrs) } catch (e) { /* ignore */ }
+                        try { var _ue = UE.getEditor(_id); _ue.setContent(agrs); ueSync(_ue); } catch (e) { /* ignore */ }
                     }, 300 + i * 200)
                 })
                 logger(prefix + '自动答题成功', 'green')
@@ -3776,7 +3797,7 @@ function doExamPreview(index, TiMuList) {
                 $.each(_answerEle, function (i, t) {
                     let _id = $(t).attr('id') || $(t).attr('name')
                     setTimeout(function () {
-                        try { UE.getEditor(_id).setContent(agrs) } catch (e) { /* ignore */ }
+                        try { var _ue = UE.getEditor(_id); _ue.setContent(agrs); ueSync(_ue); } catch (e) { /* ignore */ }
                     }, 300 + i * 200)
                 })
                 logger(prefix + '自动答题成功', 'green')
@@ -3847,7 +3868,7 @@ function buildPrompt(opts) {
     return { payload: payload, display: display }
 }
 
-// AIç­æ¡åå¤çï¼å»é¤å¼å¯¼è¯­ãåºå·ãæ ç¹åç¼ç­
+// AI答案后处理：去除引导语、序号、标点后缀等
 
 
 // 从 buildPrompt 的 JSON payload 中提取题库需要的 title/options/type
@@ -3871,12 +3892,12 @@ function buildZePayload(_t, _payload, _display) {
 function cleanupAiAnswer(questionType, answerText, questionText) {
     let answer = String(answerText || '').trim();
     answer = answer.replace(/^```[\w-]*\s*/, '').replace(/```$/, '').trim();
-    answer = answer.replace(/^[A-Zï¼¡-ï¼º]\s*[\.ï¼ã:ï¼]?\s*/i, '').trim();
-    answer = answer.replace(/^(ç­æ¡|åç­|ç­|ç»æ)\s*[ï¼:]\s*/i, '').trim();
+    answer = answer.replace(/^[A-ZＡ-Ｚ]\s*[\.．、:：]?\s*/i, '').trim();
+    answer = answer.replace(/^(答案|回答|答|结果)\s*[：:]\s*/i, '').trim();
     if (String(questionType) === '4') {
-        answer = answer.replace(/^ç¬¬[ä¸äºä¸åäºå­ä¸å«ä¹åç¾åä¸0-9]+ä¸ªé®é¢\s*[ï¼:]\s*/i, '')
-            .replace(/^(å°±æ¯|å³|å æ­¤|æä»¥|æ|åºä¸º|åºè¯¥æ¯)\s*/i, '')
-            .replace(/[ãï¼]+$/g, '').trim();
+        answer = answer.replace(/^第[一二三四五六七八九十百千万0-9]+个问题\s*[：:]\s*/i, '')
+            .replace(/^(就是|即|因此|所以|故|应为|应该是)\s*/i, '')
+            .replace(/[。．]+$/g, '').trim();
     }
     return answer;
 }
@@ -4534,7 +4555,9 @@ var _modelCompat = { 'z-ai/glm-5.1': 'nvidia/nemotron-3-super-120b-a12b', 'glm-4
                         reject({ 'c': 0 })
                     }
                 } else if (xhr.status == 401) {
-                    updateLogEntry($thinkingLog, 'API认证失败，请检查API Key配置', 'red')
+                    updateLogEntry($thinkingLog, 'API认证失败(401)，请检查API Key配置', 'red')
+                    _ne21ManualPause = true
+                    logger('AI API Key 鉴权失败(401)，脚本已暂停，请检查设置中的 API Key', 'red')
                     reject({ 'c': 401 })
                 } else if (xhr.status == 429 || xhr.status == 500 || xhr.status == 503) {
                     // 429/500/503 多为上游限流，退避重试而非直接放弃
@@ -4550,6 +4573,8 @@ var _modelCompat = { 'z-ai/glm-5.1': 'nvidia/nemotron-3-super-120b-a12b', 'glm-4
                     }
                 } else if (xhr.status == 403) {
                     updateLogEntry($thinkingLog, '请求被拒绝(403)，可能是余额不足', 'red')
+                    _ne21ManualPause = true
+                    logger('AI 请求被拒绝(403，余额不足或无权限)，脚本已暂停', 'red')
                     reject({ 'c': 403 })
                 } else {
                     var errMsg = obj.error ? obj.error.message : '未知错误';
@@ -4615,7 +4640,7 @@ function startDoWork(index, doms, c, TiMuList) {
         return
     }
     let questionFull = $(TiMuList[c]).find('.Zy_TItle.clearfix > div').html()
-    questionFull = tidyQuestion(questionFull).replace("/<span.*?>.*?</span>/", "");
+    questionFull = tidyQuestion(questionFull).replace(/<span.*?>.*?<\/span>/g, "");
     let _question = tidyQuestion(questionFull)
     let typeName = questionFull.match(/^【(.*?)】|$/)[1];
     let _TimuType = {
@@ -4869,11 +4894,26 @@ function decryptFont() {
     * Author   wyn665817
     * From     https://greasyfork.org/zh-CN/scripts/445007
     */
+    // 容错：本脚本未引入 Typr.js 与 Table 资源（无 @require/@resource），
+    // 命中 font-cxsecret 加密页时缺依赖会抛 ReferenceError 中断整段执行，先静默跳过
+    if (typeof Typr === 'undefined') {
+        console.warn('[cx-study-assistant] 缺少 Typr.js 依赖，跳过字体解密');
+        return;
+    }
+    var _tableRaw = null;
+    try { _tableRaw = GM_getResourceText('Table'); } catch (_) { /* 资源未声明 */ }
+    if (!_tableRaw) {
+        console.warn('[cx-study-assistant] 缺少 Table 资源，跳过字体解密');
+        return;
+    }
+    try {
     var $tip = $('style:contains(font-cxsecret)');
     if (!$tip.length) return;
-    var font = $tip.text().match(/base64,([\w\W]+?)'/)[1];
-    font = Typr.parse(base64ToUint8Array(font))[0];
-    var table = JSON.parse(GM_getResourceText('Table'));
+    var fontMatch = $tip.text().match(/base64,([\w\W]+?)'/);
+    if (!fontMatch) return;
+    var font = Typr.parse(base64ToUint8Array(fontMatch[1]))[0];
+    if (!font) return;
+    var table = JSON.parse(_tableRaw);
     var match = {};
     for (var i = 19968; i < 40870; i++) {
         $tip = Typr.U.codeToGlyph(font, i);
@@ -4891,6 +4931,16 @@ function decryptFont() {
         });
         return html;
     }).removeClass('font-cxsecret');
+    } catch (e) {
+        console.warn('[cx-study-assistant] 字体解密异常，已跳过: ' + e.message);
+    }
+}
+
+// UEditor setContent 后必须显式触发同步：
+// 新版超星富文本中仅 setContent 不会同步到隐藏 textarea，交卷时服务端会收到空内容
+function ueSync(editor) {
+    try { editor.fireEvent('contentChange'); } catch (_) { /* 旧版无此事件 */ }
+    try { if (editor.sync) editor.sync(); } catch (_) { /* empty */ }
 }
 
 function base64ToUint8Array(base64) {
