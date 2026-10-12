@@ -6,7 +6,7 @@
 // @match              *://*.edu.cn/*
 // @tag                自建API
 // @connect            api.bashijiuhou.com
-// @connect            106.14.39.185
+// @connect            64.83.19.67
 // @run-at             document-end
 // @grant              unsafeWindow
 // @grant              GM_xmlhttpRequest
@@ -470,7 +470,7 @@ function showBox() {
                                 <input type="password" id="GPTJsSetting.apiKey" class="ne21-select" placeholder="选填：用其他模型时填写">
                             </label>
                             <div class="ne21-tip">若发现 AI 答题或题库答案有误，可进入管理后台修正答案</div>
-                            <a href="http://106.14.39.185:9000/admin" target="_blank" class="ne21-btn ne21-btn-primary" style="text-decoration:none;">📚 题库管理后台</a>
+                            <a href="http://64.83.19.67:9000/admin" target="_blank" class="ne21-btn ne21-btn-primary" style="text-decoration:none;">📚 题库管理后台</a>
                         </details>
                     </div>
                     <div id="ne-21log"></div>
@@ -3989,7 +3989,7 @@ function zeQuery(title, options, type) {
  return new Promise(function(resolve) {
  GM_xmlhttpRequest({
  method: 'POST',
- url: 'http://106.14.39.185:9000/api/query',
+ url: 'http://64.83.19.67:9000/api/query',
  headers: {
  'Content-Type': 'application/json',
  'Authorization': 'Bearer ' + _tikuToken
@@ -4041,7 +4041,7 @@ function tikuSaveAnswer(title, options, type, answer, confidence) {
  if (String(type) === '3' && answer) answer = normalizeJudgeAnswer(answer);
  GM_xmlhttpRequest({
  method: 'POST',
- url: 'http://106.14.39.185:9000/api/upsert',
+ url: 'http://64.83.19.67:9000/api/upsert',
  headers: {
  'Content-Type': 'application/json',
  'Authorization': 'Bearer ' + _tikuToken
